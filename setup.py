@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # pylint: disable=line-too-long,missing-docstring
+# pylint: disable=attribute-defined-outside-init
 # pylint: disable=fixme
 '''Setup script for MHTML.'''
 
@@ -23,28 +24,46 @@ class CleanCommand(_CleanCommand):
     user_options = _CleanCommand.user_options[:]
     user_options.extend([
         # The format is (long option, short option, description).
-        ('egg-info', None, 'clean up .egg-info dir'),
+        ('egg-base=', 'e',
+         'directory containing .egg-info directories '
+         '(default: top of the source tree)'),
+        ('egg-info', None, 'remove *.egg-info directory'),
+        ('pycache', 'p', 'remove __pycache__ directories'),
     ])
+    boolean_options = _CleanCommand.boolean_options[:]
+    boolean_options.extend(['egg-info', 'pycache'])
 
     def initialize_options(self):
         super().initialize_options()
+        self.egg_base = None
         self.egg_info = False
+        self.pycache = False
 
     def finalize_options(self):
         super().finalize_options()
 
+        if self.egg_base is None:
+            self.egg_base = os.curdir
+
         if self.all:
             self.egg_info = True
+            self.pycache = True
 
     def run(self):
         super().run()
 
-        dir_names = list()
+        dir_names = set()
 
         if self.egg_info:
-            for name in os.listdir():
-                if name.endswith('.egg-info') and os.path.isdir(name):
-                    dir_names.append(name)
+            for name in os.listdir(self.egg_base):
+                dname = os.path.join(self.egg_base, name)
+                if name.endswith('.egg-info') and os.path.isdir(dname):
+                    dir_names.add(dname)
+
+        if self.pycache:
+            for root, dirs, _ in os.walk(os.curdir):
+                if '__pycache__' in dirs:
+                    dir_names.add(os.path.join(root, '__pycache__'))
 
         for dir_name in dir_names:
             if os.path.exists(dir_name):
