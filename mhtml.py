@@ -1,4 +1,5 @@
 # pylint: disable=missing-docstring
+# pylint: disable=protected-access
 # pylint: disable=fixme
 
 __version__ = '0.1.0'
@@ -55,12 +56,12 @@ class MHTMLArchive:
         for resource in self._resources[from_nr:]:
             resource._update_offsets(amount)
 
-    def get_resource(self, nr):
+    def get_resource(self, nr):  # pylint: disable=invalid-name
         if nr < 0 or nr >= len(self._resources):
             return None
         return self._resources[nr]
 
-    def remove_resource(self, nr):
+    def remove_resource(self, nr):  # pylint: disable=invalid-name
         if nr < 0 or nr >= len(self._resources):
             return False
 
@@ -76,6 +77,8 @@ class MHTMLArchive:
         # update offsets of following resources
         resource_length = end - start
         self._update_offsets(-resource_length, nr)
+
+        return True
 
 
 class ResourceHeader:
@@ -189,6 +192,7 @@ class ResourceHeader:
 
 
 class Resource:
+    # pylint: disable=too-many-arguments
     def __init__(self, mhtml_file, headers,
                  offset_start, offset_content, offset_end):
         self._mhtml_file = mhtml_file
@@ -196,6 +200,7 @@ class Resource:
         self._offset_start = offset_start
         self._offset_content = offset_content
         self._offset_end = offset_end
+    # pylint: enable=too-many-arguments
 
     @property
     def headers(self):
@@ -487,7 +492,7 @@ def parse_mhtml(content):
 # ----------------------------------------------------------------------------
 
 
-def parse_mhtml_struct(content, only_header=False):
+def parse_mhtml_struct(content, only_header=False):  # noqa: E501 pylint: disable=too-many-locals
     pos = 0
 
     # parse main header
@@ -527,16 +532,18 @@ def parse_mhtml_struct(content, only_header=False):
     return mhtml_file
 
 
-def MHTMLArchive_from_file(filename, only_header=False):
+# pylint: disable=invalid-name
+def MHTMLArchive_from_file(filename, only_header=False):  # noqa: N802
     with open(filename, 'rb') as fin:
         content = fin.read()
 
     return parse_mhtml_struct(content, only_header=only_header)
 
-
-def MHTMLArchive_to_file(mhtml_archive, filename,):
+i
+def MHTMLArchive_to_file(mhtml_archive, filename):  # noqa: N802
     with open(filename, 'wb') as fout:
         fout.write(mhtml_archive.content)
+# pylint: enable=invalid-name
 
 
 # EOF

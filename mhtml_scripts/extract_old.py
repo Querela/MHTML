@@ -5,8 +5,6 @@ import email
 import logging
 import os
 
-import mhtml
-
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())

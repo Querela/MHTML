@@ -5,16 +5,18 @@
 '''Setup script for MHTML.'''
 
 try:
-    from setuptools import setup
+    from setuptools import setup, Command
 except ImportError:
-    from distutils.core import setup
+    from distutils.core import setup, Command
 
+import distutils.log
 from distutils import dir_util
-from distutils.command.clean import clean as _CleanCommand
+from distutils.command.clean import clean as _CleanCommand  # noqa: N812
 
 import codecs
 import os
 import re
+import subprocess
 
 
 class CleanCommand(_CleanCommand):
@@ -27,16 +29,16 @@ class CleanCommand(_CleanCommand):
         ('egg-base=', 'e',
          'directory containing .egg-info directories '
          '(default: top of the source tree)'),
-        ('egg-info', None, 'remove *.egg-info directory'),
+        ('eggs', None, 'remove *.egg-info and *.eggs directories'),
         ('pycache', 'p', 'remove __pycache__ directories'),
     ])
     boolean_options = _CleanCommand.boolean_options[:]
-    boolean_options.extend(['egg-info', 'pycache'])
+    boolean_options.extend(['eggs', 'pycache'])
 
     def initialize_options(self):
         super().initialize_options()
         self.egg_base = None
-        self.egg_info = False
+        self.eggs = False
         self.pycache = False
 
     def finalize_options(self):
@@ -46,7 +48,7 @@ class CleanCommand(_CleanCommand):
             self.egg_base = os.curdir
 
         if self.all:
-            self.egg_info = True
+            self.eggs = True
             self.pycache = True
 
     def run(self):
@@ -54,11 +56,16 @@ class CleanCommand(_CleanCommand):
 
         dir_names = set()
 
-        if self.egg_info:
+        if self.eggs:
             for name in os.listdir(self.egg_base):
                 dname = os.path.join(self.egg_base, name)
                 if name.endswith('.egg-info') and os.path.isdir(dname):
                     dir_names.add(dname)
+            for name in os.listdir(os.curdir):
+                if name.endswith('.egg'):
+                    dir_names.add(name)
+                if name == '.eggs':
+                    dir_names.add(name)
 
         if self.pycache:
             for root, dirs, _ in os.walk(os.curdir):
@@ -71,6 +78,54 @@ class CleanCommand(_CleanCommand):
             else:
                 self.announce('skipping {0} since it does not exist'
                               .format(dir_name))
+
+
+class PylintCommand(Command):
+    '''A custom command to run Pylint on all Python source files.
+    see: https://jichu4n.com/posts/how-to-add-custom-build-steps-and-commands-to-setuppy/
+    '''  # noqa: E501
+
+    description = 'run Pylint on Python source files'
+    user_options = [
+        ('pylint-rcfile=', None, 'path to Pylint config file'),
+        ('dir=', None, 'path to run Pylint on'),
+    ]
+
+    def initialize_options(self):
+        '''Set default values for options.'''
+        self.pylint_rcfile = ''
+        self.dir = ''
+
+    def finalize_options(self):
+        '''Post-process options.'''
+        if self.pylint_rcfile:
+            assert os.path.exists(self.pylint_rcfile), \
+                ('Pylint config file %s does not exist.' % self.pylint_rcfile)
+        if self.dir:
+            assert os.path.exists(self.dir), \
+                    ('Folder %s to check does not exist.' % self.dir)
+
+    def run(self):
+        '''Run command.'''
+        command = ['pylint']
+        # command.append('-d F0010')  # TODO: hmmm?
+        if self.pylint_rcfile:
+            command.append('--rcfile=%s' % self.pylint_rcfile)
+        if self.dir:
+            command.append(self.dir)
+        else:
+            # command.append(os.getcwd())
+            command.append('**/*.py')
+
+        self.announce(
+            'Running command: %s' % str(command), level=distutils.log.INFO)
+        try:
+            subprocess.check_call(' '.join(command), shell=True)
+        except subprocess.CalledProcessError as cpe:
+            self.announce(cpe, level=distutils.log.ERROR)
+            # see: flake8 handling
+            raise SystemExit from cpe
+        # self.spawn(command)
 
 
 def find_version(path):
@@ -124,11 +179,15 @@ setup(
     install_requires=[
     ],
     tests_require=[
+        'pytest',
+        'pytest-cov',
+        'pytest-pylint',
     ],
     # $ pip install -e .[dev]
     # $ flake8 *.py
     # $ pylint *.py
     # $ pyment -q "'''" *.py
+    # $ prospector
     extras_require={
         'dev': [
             'flake8',
@@ -136,8 +195,12 @@ setup(
             'pyment',
         ]
     },
+    setup_requires=[
+        'pytest-runner',
+    ],
     # zip_safe=False,
     cmdclass={
         'clean': CleanCommand,
+        'pylint': PylintCommand,
     },
 )
