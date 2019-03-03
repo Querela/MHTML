@@ -1,6 +1,9 @@
 # pylint: disable=missing-docstring
 # pylint: disable=fixme
 
+__version__ = '0.1.0'
+
+
 import logging
 import os
 
