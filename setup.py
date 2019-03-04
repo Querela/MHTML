@@ -31,15 +31,17 @@ class CleanCommand(_CleanCommand):
          '(default: top of the source tree)'),
         ('eggs', None, 'remove *.egg-info and *.eggs directories'),
         ('pycache', 'p', 'remove __pycache__ directories'),
+        ('pytest', None, 'remove pytest + coverage hidden files'),
     ])
     boolean_options = _CleanCommand.boolean_options[:]
-    boolean_options.extend(['eggs', 'pycache'])
+    boolean_options.extend(['eggs', 'pycache', 'pytest'])
 
     def initialize_options(self):
         super().initialize_options()
         self.egg_base = None
         self.eggs = False
         self.pycache = False
+        self.pytest = False
 
     def finalize_options(self):
         super().finalize_options()
@@ -50,11 +52,13 @@ class CleanCommand(_CleanCommand):
         if self.all:
             self.eggs = True
             self.pycache = True
+            self.pytest = True
 
-    def run(self):
+    def run(self):  # pylint: disable=too-many-branches
         super().run()
 
         dir_names = set()
+        file_names = set()
 
         if self.eggs:
             for name in os.listdir(self.egg_base):
@@ -72,12 +76,25 @@ class CleanCommand(_CleanCommand):
                 if '__pycache__' in dirs:
                     dir_names.add(os.path.join(root, '__pycache__'))
 
+        if self.pytest:
+            file_names.add('.coverage')
+            dir_names.add('.pytest_cache')
+
         for dir_name in dir_names:
             if os.path.exists(dir_name):
                 dir_util.remove_tree(dir_name, dry_run=self.dry_run)
             else:
                 self.announce('skipping {0} since it does not exist'
                               .format(dir_name))
+
+        for file_name in file_names:
+            if os.path.exists(file_name):
+                self.announce('removing file {0}', level=distutils.log.INFO)
+                if not self.dry_run:
+                    os.remove(file_name)
+            else:
+                self.announce('skipping {0} since it does not exist'
+                              .format(file_name))
 
 
 class PylintCommand(Command):
@@ -238,12 +255,18 @@ setup(
     # $ flake8 *.py
     # $ pylint *.py
     # $ pyment -q "'''" *.py
+    # $ coverage report --skip-covered
+    # $ coverage html
+    # $ coverage erase
     # $ prospector
     extras_require={
         'dev': [
             'flake8',
             'pylint',
             'pyment',
+            'pytest',
+            'pytest-cov',
+            # 'coverage',
         ]
     },
     setup_requires=[

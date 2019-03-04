@@ -175,11 +175,18 @@ class ResourceHeader:
 
         return default
 
+    def __eq__(self, other):
+        # needed for assertions
+        if not isinstance(other, self.__class__):
+            return False
+        return self._headers == other._headers
+
     def __str__(self):
         return str(self._headers)
 
     def __repr__(self):
-        return repr(self._headers)
+        # can be really wierd when in interactive mode ...
+        return 'ResourceHeader: ' + repr(self._headers)
 
     def as_dict(self):
         ret = dict()
@@ -277,6 +284,9 @@ def next_line(content, from_pos):
 
     if next_pos == -1:
         line = content[from_pos:]
+    elif next_pos == len(content):
+        line = content[from_pos:]
+        next_pos = -1
     else:
         while content[next_pos] == ord(b'\t'):
             next_pos = find_next_linebreak(content, next_pos)
@@ -290,10 +300,12 @@ def parse_header(content, from_pos):
     header = ResourceHeader()
     next_pos = from_pos
 
-    while True:
+    num_empty_lines = 0
+    while next_pos != -1:
         line, next_pos = next_line(content, next_pos)
 
         if len(line) <= 2:
+            num_empty_lines += 1
             break
 
         line = line[:-2]
@@ -305,6 +317,8 @@ def parse_header(content, from_pos):
             continue
 
         header[parts[0]] = parts[1]
+
+    assert num_empty_lines >= 1, 'after header at least one empty line!'
 
     return header, next_pos
 
@@ -363,6 +377,8 @@ def make_filename(headers, folder=None, default='index.html',
     name = name.split('=', 1)[0]
 
     if not guess_extension:
+        if folder:
+            name = os.path.join(folder, name)
         return name
 
     if '.' not in name:
@@ -393,10 +409,13 @@ def make_uniq_filename(name, pre_dup_str='dup_'):
         last_name = name.rsplit('/', 1)[-1]
         if '.' in last_name:
             ext = '.' + last_name.rsplit('.', 1)[-1]
-            base = name[:len(ext)]
+            base = name[:-len(ext)]
         else:
             ext = ''
             base = name
+
+        if pre_dup_str is None:
+            pre_dup_str = ''
 
         # try renames
         dup_cnt = 1
@@ -425,7 +444,7 @@ def find_next_boundary(content, boundary, from_pos):
     if content[next_pos - 2:next_pos] != b'\r\n':
         logger.debug('Found boundary in content?, %d, Search more ...',
                      next_pos)
-        return find_next_boundary(content, boundary, next_pos)
+        return find_next_boundary(content, boundary, next_pos + len(needle))
 
     return next_pos, next_pos + len(needle)
 
@@ -453,7 +472,7 @@ def parse_parts(content, boundary, from_pos):
 
     if end_pos == -1:
         logger.warning('No parts in file?, %d', from_pos)
-        return []
+        return [], -1
 
     if from_pos != end_pos:
         logger.warning('Should have found first boundary?')

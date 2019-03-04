@@ -1,0 +1,21 @@
+[paths]
+source =
+   mhtml
+   mhtml_scripts
+   */site-packages/mhtml
+   */site-packages/mhtml_scripts
+
+[run]
+branch = true
+source =
+    mhtml
+    mhtml_scripts
+    tests
+parallel = true
+
+[report]
+show_missing = true
+precision = 2
+omit = *.egg*
+exclude_lines =
+    if __name__ == .__main__.:
