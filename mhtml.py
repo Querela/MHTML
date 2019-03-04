@@ -349,7 +349,7 @@ def get_boundary(header_fields):
 
 
 def make_filename(headers, folder=None, default='index.html',
-                  ext_from_default=False):
+                  guess_extension=True, ext_from_default=False):
     if not headers:
         return default
 
@@ -362,6 +362,9 @@ def make_filename(headers, folder=None, default='index.html',
     name = name.rsplit('/', 1)[-1]
     name = name.split('=', 1)[0]
 
+    if not guess_extension:
+        return name
+
     if '.' not in name:
         ext = None
         if not ext_from_default:
@@ -373,6 +376,7 @@ def make_filename(headers, folder=None, default='index.html',
             else:
                 ext = 'bin'
         else:
+            # TODO: use `mimetype.guess_extension()` ?
             ext = ext.split('/')[-1]
 
         name = '{}.{}'.format(name, ext)
