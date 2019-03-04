@@ -87,13 +87,17 @@ class PylintCommand(Command):
 
     description = 'run Pylint on Python source files'
     user_options = [
+        ('no-color', None, 'suppress auto coloring'),
         ('pylint-rcfile=', None, 'path to Pylint config file'),
         ('dir=', None, 'path to run Pylint on'),
     ]
 
+    boolean_options = ['no-color']
+
     def initialize_options(self):
         '''Set default values for options.'''
         self.pylint_rcfile = ''
+        self.no_color = False
         self.dir = ''
 
     def finalize_options(self):
@@ -105,17 +109,63 @@ class PylintCommand(Command):
             assert os.path.exists(self.dir), \
                     ('Folder %s to check does not exist.' % self.dir)
 
+    def package_files(self, no_recurse_list=False):
+        '''Collect the files/dirs included in the registered modules.'''
+        seen_package_directories = ()
+        directories = self.distribution.package_dir or {}
+        empty_directory_exists = '' in directories
+        packages = self.distribution.packages or []
+        for package in packages:
+            package_directory = package
+            if package in directories:
+                package_directory = directories[package]
+            elif empty_directory_exists:
+                package_directory = os.path.join(
+                    directories[''], package_directory
+                )
+
+            if not no_recurse_list and \
+                    package_directory.startswith(seen_package_directories):
+                continue
+
+            seen_package_directories += (package_directory + '.',)
+            yield package_directory
+
+    def module_files(self):
+        '''Collect the files listed as py_modules.'''
+        modules = self.distribution.py_modules or []
+        filename_from = '{0}.py'.format
+        for module in modules:
+            yield filename_from(module)
+
+    def distribution_files(self):
+        '''Collect package and module files.
+        From: https://gitlab.com/pycqa/flake8/blob/master/src/flake8/main/setuptools_command.py
+        '''  # noqa: E501
+        for package in self.package_files():
+            yield package
+
+        for module in self.module_files():
+            yield module
+
+        yield 'setup.py'
+
     def run(self):
         '''Run command.'''
         command = ['pylint']
         # command.append('-d F0010')  # TODO: hmmm?
+        if not self.no_color:
+            command.append('--output-format=colorized')
         if self.pylint_rcfile:
             command.append('--rcfile=%s' % self.pylint_rcfile)
         if self.dir:
             command.append(self.dir)
         else:
             # command.append(os.getcwd())
-            command.append('**/*.py')
+            for name in self.distribution_files():
+                command.append(name)
+            # command.append('*.py')
+            # command.append('**/*.py')
 
         self.announce(
             'Running command: %s' % str(command), level=distutils.log.INFO)

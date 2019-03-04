@@ -539,7 +539,7 @@ def MHTMLArchive_from_file(filename, only_header=False):  # noqa: N802
 
     return parse_mhtml_struct(content, only_header=only_header)
 
-i
+
 def MHTMLArchive_to_file(mhtml_archive, filename):  # noqa: N802
     with open(filename, 'wb') as fout:
         fout.write(mhtml_archive.content)
