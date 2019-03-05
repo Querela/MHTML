@@ -238,6 +238,7 @@ setup(
         'console_scripts': [
             'mhtml-extract = mhtml_scripts.extract:cli_main',
             'mhtml-extract-main = mhtml_scripts.extract_main:cli_main',
+            'mhtml-merge  = mhtml_scripts.merge:cli_main',
             'mhtml-list = mhtml_scripts.show_infos:cli_main',
             'mhtml-headers = mhtml_scripts.show_headers:cli_main',
         ],

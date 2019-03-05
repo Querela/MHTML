@@ -63,17 +63,28 @@ class MHTMLArchive:
     def _set_resources(self, resources):
         self._resources = resources
 
+    def _is_valid_resource_index(self, nr):  # pylint: disable=invalid-name
+        if not isinstance(nr, int):
+            return False
+        if nr < 0 or nr >= len(self._resources):
+            return False
+        return True
+
     def _update_offsets(self, amount, from_nr):
+        if not self._is_valid_resource_index(from_nr):
+            return
+
         for resource in self._resources[from_nr:]:
             resource._update_offsets(amount)
 
     def get_resource(self, nr):  # pylint: disable=invalid-name
-        if nr < 0 or nr >= len(self._resources):
+        if not self._is_valid_resource_index(nr):
             return None
+        # TODO: allow negative index (from end?)
         return self._resources[nr]
 
     def remove_resource(self, nr):  # pylint: disable=invalid-name
-        if nr < 0 or nr >= len(self._resources):
+        if not self._is_valid_resource_index(nr):
             return False
 
         # compute ranges
@@ -88,6 +99,48 @@ class MHTMLArchive:
         # update offsets of following resources
         resource_length = end - start
         self._update_offsets(-resource_length, nr)
+
+        return True
+
+    def insert_resource(self, nr, resource):  # pylint: disable=invalid-name
+        if not isinstance(nr, int):
+            return False
+        if nr < 0:
+            return False
+        # TODO: check if same MHTML file?
+        # ok, if reordering of resources in same file
+
+        # TODO: no reources in file? - should not be possible ...
+
+        # negative index?
+        if nr < len(self._resources):
+            other_res = self._resources[nr]
+            offset = other_res.get_resource_range()[0]
+        else:
+            # index should be at end
+            other_res = self._resources[len(self.resources) - 1]
+            offset = other_res.get_resource_range()[1]
+
+        # new content
+        content = resource.content_with_headers
+        boundary = bytes('--' + self.boundary + '\r\n', 'ascii')
+        resource_length = len(content) + len(boundary)
+
+        # compute new offsets
+        offset_start = offset + len(boundary)
+        header_len = other_res._offset_content - other_res._offset_start
+        offset_content = offset_start + header_len
+        offset_end = offset_start + len(content)
+        # build new resource for archive
+        new_resource = Resource(self, resource.headers, offset_start,
+                                offset_content, offset_end)
+
+        # insert new content
+        self._content[offset:offset] = content
+        self._content[offset:offset] = boundary
+        self._resources[nr:nr] = [new_resource]
+
+        self._update_offsets(resource_length, nr + 1)
 
         return True
 
