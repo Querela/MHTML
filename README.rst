@@ -27,16 +27,23 @@ files but currently strictly refers to the Blink implementation. See:
 `Chromium Blink on GoogleSource <https://chromium.googlesource.com/chromium/src/third_party/+/master/blink/renderer/platform/mhtml/>`_,
 `Chromium Blink.git on GoogleSource <https://chromium.googlesource.com/chromium/blink.git/+/master/Source/platform/mhtml/>`_.
 
-This package was developed because the ``MIME`` / ``email`` utilities of the
-standard Python library were mangling binary content, e. g. in images.
-It maybe tried to convert ``\r`` / ``\n`` according to some policy.
-Trying to switch or disable this was not successful.
+This package was developed because the ``MIME`` / `email <https://docs.python.org/3/library/email.html>`_
+utilities of the standard Python library were mangling binary content,
+e. g. in images.
+It tried to convert ``\r`` and ``\n`` linebreak characters according to some
+policy. Trying to switch or disable this behaviour was not successful.
 This package will not work for any ``MIME`` message but tries to be completely
 save for using with MHTML files saved by the Blink engine *(?)*.
 
-It contains severals example scripts to show how the package can be used.
-That include dumping embedded resources into a directory, extracting the main
-web page or listing all the resources in a MHTML archive.
+This package doesn't currently try to fully parse the MHTML file but rather
+provide a view onto the raw binary content. Extracting a resource is only
+getting a slice between two different offsets. The header detection should
+work for almost any MHTML data but I will have to try different input files
+from other sources to be sure.
+
+This package contains severals example scripts to show how the package can be
+used. That include dumping embedded resources into a directory, extracting
+the main web page or listing all the resources in a MHTML archive.
 
 Work in progress is the ability to merge single MHTML files into a big one
 to somehow try to give an offline view of a website. E. g. the directory
