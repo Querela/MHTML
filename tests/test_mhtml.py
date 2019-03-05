@@ -611,12 +611,97 @@ def test_ResourceHeader_methods_get():  # noqa: N802
     rh['c'] = 2
     assert rh['c'] == 1
 
-# pylint: enable=protected-access
+
+def test_Resource_properties(mocker):  # noqa: N802
+    with pytest.raises(AssertionError,
+                       match='mhtml_file should be a MHTMLArchive'):
+        mhtml.Resource(None, None, 0, 0, 0)
+
+    mhtarc = mhtml.MHTMLArchive(b'', None, 0, '---boundary---')
+
+    # default resource headers
+    res = mhtml.Resource(mhtarc, None, 0, 0, 0)
+    assert res.headers == mhtml.ResourceHeader()
+    assert res.headers == res._headers
+
+    assert mhtml.Resource(mhtarc, None, 0, 0, 0).headers == \
+        mhtml.ResourceHeader()
+    assert mhtml.Resource(mhtarc, [], 0, 0, 0).headers == \
+        mhtml.ResourceHeader()
+    assert mhtml.Resource(mhtarc, {}, 0, 0, 0).headers == \
+        mhtml.ResourceHeader()
+
+    # properties
+    mock_headers = mocker.Mock(content_type='content-abc',
+                               location='location-abc',
+                               encoding='encoding-123')
+    res._headers = mock_headers
+    assert res.content_type == 'content-abc'
+    assert res.location == 'location-abc'
+    assert res.encoding == 'encoding-123'
+
+    # filename
+    mock_method = mocker.patch('mhtml.make_filename')
+    mock_method.return_value = 'name'
+    assert res.get_short_filename(default='foo') == 'name'
+    mock_method.assert_called_once_with(res._headers, default='foo')
+
+    # content
+    mock_prop = mocker.Mock(return_value=b'123')
+    res.get_content = mock_prop
+    assert res.content == b'123'
+    mock_prop.assert_called_once_with()
 
 
-def test_ResourceHeader_methods():  # noqa: N802
-    pass
+def test_Resource_content():  # noqa: N802
+    bndry = '---boundary1---'
+    content = b''
+    mhtarc = mhtml.MHTMLArchive(content, None, 0, bndry)
+
+    # this should not happen
+    # TODO: maybe later a way to construct a Resource without a MHTMLArchive?
+    # but how to use standalone? (rather a construction method/factory)
+    res = mhtml.Resource(mhtarc, None, 0, 0, 0)
+    res._mhtml_file._content = None
+    assert res.get_content() is None
+    assert res.content is None
+    assert res.content_with_headers is None
+    res._mhtml_file = None
+    assert res.get_content() is None
+    assert res.content is None
+    assert res.content_with_headers is None
+
+    bndry_part = bytes('--' + bndry + '\r\n', 'ascii')
+    bndry_end = bytes('--' + bndry + '--\r\n', 'ascii')
+    content_header = b'H1: V1\r\n\r\n'
+    content_content = b'Content\r\n'
+    content = bndry_part + content_header + content_content + bndry_end
+    # offsets in content
+    offset = len(bndry_part)
+    offset_content = offset + len(content_header)
+    offset_end = offset_content + len(content_content)
+    # objects
+    mhtarc = mhtml.MHTMLArchive(content, None, 0, bndry)
+    res = mhtml.Resource(mhtarc, None, offset, offset_content, offset_end)
+    # check
+    assert res.get_content() == content_content
+    assert res.content_with_headers == content_header + content_content
+    assert res.get_resource_range(-1) == (0, offset_end)
+    assert res.get_resource_range(offset) == (0, offset_end)
+
+    # update
+    res._update_offsets(-1)
+    assert res._offset_start == offset - 1
+    assert res._offset_content == offset_content - 1
+    assert res._offset_end == offset_end - 1
+    res._update_offsets(3)
+    assert res._offset_start == offset - 1 + 3
+    assert res._offset_content == offset_content - 1 + 3
+    assert res._offset_end == offset_end - 1 + 3
 
 
 def test_Resource():  # noqa: N802
     pass
+
+
+# pylint: enable=protected-access

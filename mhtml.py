@@ -46,7 +46,6 @@ class MHTMLArchive:
 
     @property
     def content_type(self):
-        # return get_content_type(self._headers)
         return self.headers.content_type
 
     @property
@@ -242,8 +241,11 @@ class Resource:
 
     @property
     def content_type(self):
-        # return get_content_type(self._headers)
         return self.headers.content_type
+
+    @property
+    def encoding(self):
+        return self.headers.encoding
 
     @property
     def location(self):
@@ -271,7 +273,7 @@ class Resource:
         return content
 
     @property
-    def content_and_headers(self):
+    def content_with_headers(self):
         if not self._mhtml_file:
             return None
         if not self._mhtml_file._content:
