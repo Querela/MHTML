@@ -480,6 +480,7 @@ def parse_parts(content, boundary, from_pos):
     parts = list()
 
     while next_pos != -1:
+        logger.debug(next_pos)
         part_data, next_pos = parse_part(content, boundary, next_pos)
         parts.append(part_data)
 

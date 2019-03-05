@@ -236,7 +236,7 @@ setup(
     ],
     entry_points={
         'console_scripts': [
-            'mhtml-extract = mthml_scripts.extract:cli_main',
+            'mhtml-extract = mhtml_scripts.extract:cli_main',
             'mhtml-extract-main = mhtml_scripts.extract_main:cli_main',
             'mhtml-list = mhtml_scripts.show_infos:cli_main',
             'mhtml-headers = mhtml_scripts.show_headers:cli_main',
@@ -249,7 +249,7 @@ setup(
     tests_require=[
         'pytest',
         'pytest-cov',
-        # 'pytest-mock',
+        'pytest-mock',
         'pytest-pylint',
     ],
     # $ pip install -e .[dev]
@@ -267,7 +267,7 @@ setup(
             'pyment',
             'pytest',
             'pytest-cov',
-            # 'pytest-mock',
+            'pytest-mock',
             # 'coverage',
         ]
     },
