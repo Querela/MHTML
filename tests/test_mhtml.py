@@ -106,38 +106,26 @@ def test_make_filename():
     assert mhtml.make_filename(mock_headers) == 'file.mystery'
 
 
-def test_make_uniq_filename():
-    import os
-    import shutil
-    import tempfile
+def test_make_uniq_filename(monkeypatch):
+    import os.path
 
-    with tempfile.NamedTemporaryFile() as fp:
-        assert mhtml.make_uniq_filename(fp.name, pre_dup_str='dpp_') == \
-            fp.name + '.dpp_1'
+    name = 'abc'
 
-    assert mhtml.make_uniq_filename(__file__, pre_dup_str=None) == \
-        __file__.rsplit('.', 1)[0] + '.1.' + __file__.rsplit('.', 1)[1]
+    def mock_exists(fn):
+        return fn == name
 
-    tempdir = tempfile.mkdtemp()
-    try:
-        fname = os.path.join(tempdir, 'abc')
-        assert mhtml.make_uniq_filename(fname) == fname
-        with open(fname, 'w'):
-            pass
-        fname1 = fname + '.dupi1'
-        assert mhtml.make_uniq_filename(fname, pre_dup_str='dupi') == fname1
-        with open(fname1, 'w'):
-            pass
-        fname2 = fname + '.dupi2'
-        with open(fname2, 'w'):
-            pass
-        fname3 = fname + '.dupi3'
-        assert mhtml.make_uniq_filename(fname, pre_dup_str='dupi') == fname3
-        assert set(os.listdir(tempdir)) == {os.path.basename(fname),
-                                            os.path.basename(fname1),
-                                            os.path.basename(fname2)}
-    finally:
-        shutil.rmtree(tempdir)
+    monkeypatch.setattr(os.path, 'exists', mock_exists)
+    assert mhtml.make_uniq_filename('abc', pre_dup_str='dpp_') == 'abc.dpp_1'
+
+    def mock_exists2(fn):
+        return fn in (name, name + '.dpd_1')
+
+    monkeypatch.setattr(os.path, 'exists', mock_exists2)
+    assert mhtml.make_uniq_filename('abc', pre_dup_str='dpd_') == 'abc.dpd_2'
+
+    monkeypatch.setattr(os.path, 'exists', lambda _: False)
+    assert mhtml.make_uniq_filename('abc', pre_dup_str='dpd_') == 'abc'
+    assert mhtml.make_uniq_filename('abcd', pre_dup_str='dpd_') == 'abcd'
 
 
 # ---------------------------------------------------------------------------

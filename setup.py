@@ -249,6 +249,7 @@ setup(
     tests_require=[
         'pytest',
         'pytest-cov',
+        # 'pytest-mock',
         'pytest-pylint',
     ],
     # $ pip install -e .[dev]
@@ -266,6 +267,7 @@ setup(
             'pyment',
             'pytest',
             'pytest-cov',
+            # 'pytest-mock',
             # 'coverage',
         ]
     },
