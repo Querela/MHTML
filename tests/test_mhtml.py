@@ -689,6 +689,9 @@ def test_Resource_content():  # noqa: N802
     assert res.get_resource_range(-1) == (0, offset_end)
     assert res.get_resource_range(offset) == (0, offset_end)
 
+    # TODO: may need an error case?
+    # wrong offset or missing content?
+
     # update
     res._update_offsets(-1)
     assert res._offset_start == offset - 1

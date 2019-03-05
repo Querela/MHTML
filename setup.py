@@ -260,6 +260,7 @@ setup(
     # $ coverage html
     # $ coverage erase
     # $ prospector
+    # $ python setup.py check -r -s
     extras_require={
         'dev': [
             'flake8',
@@ -268,6 +269,7 @@ setup(
             'pytest',
             'pytest-cov',
             'pytest-mock',
+            'readme_renderer',
             # 'coverage',
         ]
     },
