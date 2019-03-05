@@ -18,6 +18,18 @@ logger.addHandler(logging.NullHandler())
 
 class MHTMLArchive:
     def __init__(self, content, headers, header_length, boundary):
+        assert isinstance(content, bytes), 'content should be bytes'
+
+        if not isinstance(headers, ResourceHeader):
+            logger.warning('headers not from %s type: %s',
+                           ResourceHeader.__qualname__, type(headers))
+            headers = ResourceHeader()
+            header_length = 0  # TODO: WIP
+
+        if not boundary:
+            # TODO: create boundary?
+            pass
+
         self._headers = headers
         self._header_length = header_length
         self._boundary = boundary
@@ -123,7 +135,7 @@ class ResourceHeader:
         self._headers.append((str(name), value))
 
     def __delitem__(self, name):
-        if not name:
+        if name is None:
             return
 
         name = str(name).lower()
@@ -147,7 +159,7 @@ class ResourceHeader:
         return self._headers
 
     def get(self, name, default=None):
-        if not name:
+        if name is None:
             return default
 
         name = str(name).lower()
@@ -161,7 +173,7 @@ class ResourceHeader:
         if default is None:
             default = list()
 
-        if not name:
+        if name is None:
             return default
 
         values = list()
@@ -180,6 +192,9 @@ class ResourceHeader:
         if not isinstance(other, self.__class__):
             return False
         return self._headers == other._headers
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
 
     def __str__(self):
         return str(self._headers)
@@ -202,6 +217,18 @@ class Resource:
     # pylint: disable=too-many-arguments
     def __init__(self, mhtml_file, headers,
                  offset_start, offset_content, offset_end):
+        assert isinstance(mhtml_file, MHTMLArchive), \
+            'mhtml_file should be a MHTMLArchive'
+
+        if not isinstance(headers, ResourceHeader):
+            if isinstance(headers, (list, dict)):
+                logger.debug('Converting list/dict headers into ResourceHeader')
+                headers = ResourceHeader(headers)
+            else:
+                logger.warning('headers given are not from type %s: %s',
+                               ResourceHeader.__qualname__, type(headers))
+                headers = ResourceHeader()
+
         self._mhtml_file = mhtml_file
         self._headers = headers
         self._offset_start = offset_start

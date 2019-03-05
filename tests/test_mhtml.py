@@ -369,11 +369,252 @@ def test_MHTMLArchive_to_file(mocker):  # noqa: N80
 # ---------------------------------------------------------------------------
 
 
-def test_MHTMLArchive():  # noqa: N802
-    pass
+# pylint: disable=protected-access
+def test_MHTMLArchive_properties(mocker):  # noqa: N802
+    mock_headers = mocker.Mock(content_type='content-abc',
+                               location='location-abc')
+    mhtarc = mhtml.MHTMLArchive(b'content', mock_headers, 0, '---boundary---')
+
+    assert mhtarc.headers == mhtml.ResourceHeader()
+    mhtarc._headers = mock_headers
+
+    assert mhtarc.headers == mock_headers
+    assert mhtarc.content_type == 'content-abc'
+    assert mhtarc.location == 'location-abc'
+    assert mhtarc.boundary == '---boundary---'
+
+    assert mhtarc.content == b'content'
+
+    assert mhtarc.resources == []
+    assert mhtarc.get_resource(0) is None
+    assert mhtarc.get_resource(-1) is None
+    assert mhtarc.get_resource(10) is None
+
+    mhtarc._set_resources([1])
+    assert mhtarc.resources == [1]
+    assert mhtarc.get_resource(0) == 1
+    assert mhtarc.get_resource(1) is None
+    assert mhtarc.remove_resource(-1) is False
+    # wrong resource type should raise an error
+    with pytest.raises(AttributeError,
+                       match="""'int' object has no attribute 'get_resource_range'"""):  # noqa: E501  pylint: disable=line-too-long
+        mhtarc.remove_resource(0)
+
+    mhtarc = mhtml.MHTMLArchive(b'content', None, 0, '---boundary---')
+    assert mhtarc.headers == mhtml.ResourceHeader()
 
 
-def test_ResourceHeader():  # noqa: N802
+def test_MHTMLArchive_remove_resource(mocker):  # noqa: N802
+    mhtarc = mhtml.MHTMLArchive(b'content', mhtml.ResourceHeader(), 0,
+                                '---boundary---')
+
+    mock_resource = mocker.Mock()
+    mock_resource.get_resource_range.return_value = (2, 5)
+    mock_method = mocker.Mock()
+    mhtarc._update_offsets = mock_method
+    mhtarc._set_resources([mock_resource])
+
+    assert mhtarc.remove_resource(0) is True
+    assert mhtarc.remove_resource(0) is False
+
+    assert mhtarc.content == b'cont'
+    assert mhtarc.resources == []
+    mock_resource.get_resource_range.assert_called_once_with(18)
+    mock_method.assert_called_once_with(-3, 0)
+
+
+def test_MHTMLArchive_update_offsets(mocker):  # noqa: N802
+    mhtarc = mhtml.MHTMLArchive(b'content', mhtml.ResourceHeader(), 0,
+                                '---boundary---')
+
+    mock_resource = mocker.Mock()
+    mock_resource2 = mocker.Mock()
+    mhtarc._set_resources([mock_resource, mock_resource2])
+
+    mhtarc._update_offsets(-5, 1)
+
+    mock_resource._update_offsets.assert_not_called()
+    mock_resource2._update_offsets.assert_called_once_with(-5)
+
+    mhtarc._update_offsets(2, 0)
+
+    mock_resource._update_offsets.assert_called_once_with(2)
+    mock_resource2._update_offsets.assert_any_call(2)
+
+
+def test_ResourceHeader_headers():  # noqa: N802
+    # single header as list or dict
+    rh = mhtml.ResourceHeader([('a', 'b')])
+    assert rh._headers == [('a', 'b')]
+    rh = mhtml.ResourceHeader({'aA': 'BbC'})
+    assert rh._headers == [('aA', 'BbC')]
+
+    # empty header + add some
+    rh = mhtml.ResourceHeader()
+    assert rh._headers == []
+    assert len(rh) == 0  # pylint: disable=len-as-condition
+    rh['C'] = 'BbBb'
+    rh['AAaA'] = 'BbBb'
+    rh['AAaA'] = 'BbBb'
+    rh['aaaa'] = 'bbbb'
+    assert rh._headers == [('C', 'BbBb'), ('AAaA', 'BbBb'), ('AAaA', 'BbBb'),
+                           ('aaaa', 'bbbb')]
+    assert rh.items() == [('C', 'BbBb'), ('AAaA', 'BbBb'), ('AAaA', 'BbBb'),
+                          ('aaaa', 'bbbb')]
+    assert len(rh) == 4
+
+    # none as key is ignored
+    rh[None] = 1
+    assert len(rh) == 4
+    rh[''] = 1
+    assert len(rh) == 5
+
+    # set converts name to string
+    rh[1] = 2
+    assert len(rh) == 6
+    assert rh._headers[5] == ('1', 2)
+
+    # check contains, case insensitive
+    assert '1' in rh
+    assert 'c' in rh
+    assert 'aaaa' in rh
+    assert 'AAAA' in rh
+    assert 'xxxxx' not in rh
+    assert not 'xxxxx' in rh  # noqa: E713 pylint: disable=unneeded-not
+
+    rh[None] = 1
+    assert None not in rh
+
+
+def test_ResourceHeader_properties(mocker):  # noqa: N802
+    rh = mhtml.ResourceHeader()
+    rh['C'] = 'BbBb'
+
+    # content type
+    mock_method = mocker.patch('mhtml.get_content_type')
+    mock_method.return_value = 'ab'
+    assert rh.content_type == 'ab'
+    mock_method.assert_called_once_with(rh)
+
+    # encoding
+    mock_get = mocker.Mock()
+    mock_get.return_value = 1
+    rh.get = mock_get
+    assert rh.encoding == 1
+    mock_get.assert_called_once_with('Content-Transfer-Encoding')
+
+    # location
+    mock_get = mocker.Mock()
+    mock_get.return_value = None
+    rh.get = mock_get
+    assert rh.location is None
+    assert mock_get.call_args_list == [
+        mocker.call('Snapshot-Content-Location'),
+        mocker.call('Content-Location')]
+
+    def mock_get_sideeffect(name):
+        if name == 'Snapshot-Content-Location':
+            return 5
+        return None
+
+    mock_get = mocker.Mock(side_effect=mock_get_sideeffect)
+    rh.get = mock_get
+    assert rh.location == 5
+
+    def mock_get_sideeffect2(name):
+        if name == 'Content-Location':
+            return 6
+        return None
+
+    mock_get = mocker.Mock(side_effect=mock_get_sideeffect2)
+    rh.get = mock_get
+    assert rh.location == 6
+
+
+def test_ResourceHeader_magic():  # noqa: N802
+    # eq / ne
+    rh1 = mhtml.ResourceHeader([('a', 'b')])
+    rh2 = mhtml.ResourceHeader([('A', 'b')])
+    rh3 = mhtml.ResourceHeader([('A', 'b')])
+    rh4 = mhtml.ResourceHeader([('c', 'b')])
+    assert not rh1 == rh2  # pylint: disable=unneeded-not
+    assert rh2 == rh3
+    assert rh1 != rh2
+    assert not rh2 != rh3  # pylint: disable=unneeded-not
+    assert rh2 != rh4
+    assert not rh1 == rh4  # pylint: disable=unneeded-not
+    assert (not rh1.__eq__(rh2)) == rh1.__ne__(rh2)
+    assert rh3.__eq__(rh2) == (not rh3.__ne__(rh2))
+
+    # checks type, not only content
+    assert rh1 != rh1._headers
+
+    # str / repr
+    assert str(rh2) == str(rh2._headers)
+    assert repr(rh2) == 'ResourceHeader: ' + repr(rh2._headers)
+
+    # as_list
+    rh = mhtml.ResourceHeader([('a', 'b'), ('A', 'c'), ('D', 'e')])
+    assert rh.as_list() == [('a', 'b'), ('A', 'c'), ('D', 'e')]
+
+    hl = rh.as_list()
+    hl.append(('t', 't'))
+    assert rh.as_list() != hl
+
+    # as_dict
+    rh = mhtml.ResourceHeader([('a', 'b'), ('A', 'c'), ('D', 'e')])
+    assert rh.as_dict() == {'a': 'b', 'A': 'c', 'D': 'e'}
+
+    # iter
+    rh = mhtml.ResourceHeader([('a', 'b'), ('A', 'c'), ('D', 'e')])
+    assert iter(rh)
+    assert list(rh) == ['a', 'A', 'D']
+
+    # del
+    rh = mhtml.ResourceHeader([('a', 'b'), ('A', 'c'), ('D', 'e')])
+    del rh['a']
+    assert rh.items() == [('D', 'e')]
+    del rh[None]
+    assert len(rh) == 1
+
+    # TODO: get/del/set empty strings?
+    rh = mhtml.ResourceHeader()
+    rh[''] = 'h'
+    assert len(rh) == 1
+    assert rh[''] == 'h'
+    del rh['']
+    assert len(rh) == 0
+
+
+def test_ResourceHeader_methods_get():  # noqa: N802
+    rh = mhtml.ResourceHeader()
+    rh['a'] = 'b'
+
+    assert rh.get(None, None) is None
+    assert rh.get(None, 'y') == 'y'
+
+    assert rh.get('A') == 'b'
+    assert rh.get('a') == 'b'
+    assert rh.get('a', None) == 'b'
+    assert rh.get('c', 'x') == 'x'
+
+    assert rh.get_all('a') == ['b']
+    assert rh.get_all('c') == []
+    assert rh.get_all(None) == []
+
+    rh['A'] = 'F'
+    assert rh.get_all('a') == ['b', 'F']
+
+    # getter
+    assert rh['a'] == 'b'
+    rh['C'] = 1
+    rh['c'] = 2
+    assert rh['c'] == 1
+
+# pylint: enable=protected-access
+
+
+def test_ResourceHeader_methods():  # noqa: N802
     pass
 
 
