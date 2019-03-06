@@ -8,6 +8,8 @@ __version__ = '0.1.0'
 import logging
 import os
 
+from enum import Enum
+
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 logger.addHandler(logging.NullHandler())
@@ -61,6 +63,10 @@ class MHTMLArchive:
         return self._boundary
 
     def _set_resources(self, resources):
+        if not isinstance(resources, list):
+            logger.warning('Try to set resources not as list: %s',
+                           type(resources))
+            resources = list()
         self._resources = resources
 
     def _is_valid_resource_index(self, nr):  # pylint: disable=invalid-name
@@ -90,6 +96,8 @@ class MHTMLArchive:
         return None, None, False
 
     def _update_offsets(self, amount, from_nr):
+        assert isinstance(amount, int), 'Offset delta must be an int!'
+
         if not self._is_valid_resource_index(from_nr):
             return
 
@@ -126,18 +134,25 @@ class MHTMLArchive:
         if nr < 0:
             return False
         # TODO: check if same MHTML file?
-        # ok, if reordering of resources in same file
+        # should be ok, e. g. if reordering of resources in same file
 
-        # TODO: no reources in file? - should not be possible ...
-
-        # negative index?
-        if nr < len(self._resources):
-            other_res = self._resources[nr]
-            offset = other_res.get_resource_range()[0]
+        # no resources in file? - should normally not be possible ...
+        if not self._resources:
+            offset = self._header_length
+            nr = 0  # just to be careful
+            needs_offset_update = False
         else:
-            # index should be at end
-            other_res = self._resources[len(self.resources) - 1]
-            offset = other_res.get_resource_range()[1]
+            # negative index? - currently not possible
+            if nr < len(self._resources):
+                other_res = self._resources[nr]
+                offset = other_res.get_resource_range()[0]
+                needs_offset_update = True
+            else:
+                # index should be at end
+                nr = len(self.resources)
+                other_res = self._resources[nr - 1]
+                offset = other_res.get_resource_range()[1]
+                needs_offset_update = False
 
         # new content
         content = resource.content_with_headers
@@ -146,7 +161,7 @@ class MHTMLArchive:
 
         # compute new offsets
         offset_start = offset + len(boundary)
-        header_len = other_res._offset_content - other_res._offset_start
+        header_len = resource._offset_content - resource._offset_start
         offset_content = offset_start + header_len
         offset_end = offset_start + len(content)
         # build new resource for archive
@@ -158,7 +173,9 @@ class MHTMLArchive:
         self._content[offset:offset] = boundary
         self._resources[nr:nr] = [new_resource]
 
-        self._update_offsets(resource_length, nr + 1)
+        if needs_offset_update:
+            # to be more explicit, only when really neccessary
+            self._update_offsets(resource_length, nr + 1)
 
         return True
 
@@ -304,6 +321,31 @@ class ResourceHeader:
         return self._headers.copy()
 
 
+class ContentEncoding(Enum):
+    QUOTEDPRINTABLE = 'quoted-printable'
+    BASE64 = 'base64'
+    EIGHTBIT = '8bit'
+    SEVENBIT = '7bit'
+    BINARY = 'binary'
+    UNKNOWN = None
+
+    @classmethod
+    def parse(cls, encoding):
+        if not encoding:
+            return cls.UNKNOWN
+        encoding = encoding.strip()
+        if not encoding:
+            return cls.UNKNOWN
+
+        encoding = encoding.lower()
+
+        for ce in (cls.BINARY, cls.BASE64, cls.QUOTEDPRINTABLE, cls.SEVENBIT,
+                   cls.EIGHTBIT):
+            if ce.value == encoding:
+                return ce
+        return cls.UNKNOWN
+
+
 class Resource:
     # pylint: disable=too-many-arguments
     def __init__(self, mhtml_file, headers,
@@ -354,24 +396,42 @@ class Resource:
     def content(self, content):
         self.set_content(content)
 
-    def get_content(self):
+    def get_content(self, decode=False):
         if not self._mhtml_file:
             return None
-        if not self._mhtml_file._content:
+        if not isinstance(self._mhtml_file._content, bytearray):
             return None
 
+        print('b')
         content = bytes(self._mhtml_file
                         ._content[self._offset_content:self._offset_end])
-        encoding = self._headers.get('Content-Transfer-Encoding', None)
-        if encoding == 'binary':
-            # TODO: base64, quopri?
+
+        if not decode:
             return content
-        return content
+
+        encoding = self._headers.encoding
+        encoding = ContentEncoding.parse(encoding)
+
+        if encoding in (ContentEncoding.BINARY, ContentEncoding.SEVENBIT,
+                           ContentEncoding.EIGHTBIT):
+            return content
+
+        if encoding is ContentEncoding.BASE64:
+            logger.warning('Unimplemented encoding ...')
+            return None
+        if encoding is ContentEncoding.QUOTEDPRINTABLE:
+            logger.warning('Unimplemented encoding ...')
+            return None
+
+        # if encoding is ContentEncoding.UNKNOWN:
+        logger.warning('Unknown content encoding: %s',
+                       self._headers.encoding)
+        return None
 
     def set_content(self, content):
         if not self._mhtml_file:
             return False
-        if not self._mhtml_file._content:
+        if not isinstance(self._mhtml_file._content, bytearray):
             return False
 
         # TODO: type check, conversions?
@@ -382,7 +442,7 @@ class Resource:
     def content_with_headers(self):
         if not self._mhtml_file:
             return None
-        if not self._mhtml_file._content:
+        if not isinstance(self._mhtml_file._content, bytearray):
             return None
 
         content = bytes(self._mhtml_file
@@ -399,6 +459,8 @@ class Resource:
         return start, end
 
     def _update_offsets(self, amount):
+        assert isinstance(amount, int), 'Offset delta must be an int!'
+
         self._offset_start += amount
         self._offset_content += amount
         self._offset_end += amount

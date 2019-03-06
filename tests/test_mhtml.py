@@ -371,13 +371,15 @@ def test_MHTMLArchive_to_file(mocker):  # noqa: N80
 
 # pylint: disable=protected-access
 def test_MHTMLArchive_properties(mocker):  # noqa: N802
+    mhtarc = mhtml.MHTMLArchive(b'content', mhtml.ResourceHeader(), 0,
+                                '---boundary---')
+    assert mhtarc.headers == mhtml.ResourceHeader()
+    mhtarc = mhtml.MHTMLArchive(b'content', None, 0, '---boundary---')
+    assert mhtarc.headers == mhtml.ResourceHeader()
+
     mock_headers = mocker.Mock(content_type='content-abc',
                                location='location-abc')
-    mhtarc = mhtml.MHTMLArchive(b'content', mock_headers, 0, '---boundary---')
-
-    assert mhtarc.headers == mhtml.ResourceHeader()
     mhtarc._headers = mock_headers
-
     assert mhtarc.headers == mock_headers
     assert mhtarc.content_type == 'content-abc'
     assert mhtarc.location == 'location-abc'
@@ -385,11 +387,24 @@ def test_MHTMLArchive_properties(mocker):  # noqa: N802
 
     assert mhtarc.content == b'content'
 
+
+def test_MHTMLArchive_properties_resources(mocker):  # noqa: N802
+    mhtarc = mhtml.MHTMLArchive(b'content', mhtml.ResourceHeader(), 0,
+                                '---boundary---')
     assert mhtarc.resources == []
     assert mhtarc.get_resource(0) is None
     assert mhtarc.get_resource(-1) is None
     assert mhtarc.get_resource(10) is None
 
+    # setting resources
+    mhtarc._set_resources(None)
+    assert isinstance(mhtarc.resources, list)
+    mhtarc._set_resources('a')
+    assert isinstance(mhtarc.resources, list)
+    mhtarc._set_resources([])
+    assert isinstance(mhtarc.resources, list)
+
+    # TODO: checking resources from type Resource?
     mhtarc._set_resources([1])
     assert mhtarc.resources == [1]
     assert mhtarc.get_resource(0) == 1
@@ -400,15 +415,59 @@ def test_MHTMLArchive_properties(mocker):  # noqa: N802
                        match="""'int' object has no attribute 'get_resource_range'"""):  # noqa: E501  pylint: disable=line-too-long
         mhtarc.remove_resource(0)
 
-    mhtarc = mhtml.MHTMLArchive(b'content', None, 0, '---boundary---')
-    assert mhtarc.headers == mhtml.ResourceHeader()
+
+def test_MHTMLArchive_helpers(mocker):  # noqa: N802
+    mhtarc = mhtml.MHTMLArchive(b'content', mhtml.ResourceHeader(), 0,
+                                '---boundary---')
+
+    # valid resource index
+    assert mhtarc._is_valid_resource_index(None) is False
+    assert mhtarc._is_valid_resource_index(3.4) is False
+    assert mhtarc._is_valid_resource_index(-1) is False
+    assert mhtarc._is_valid_resource_index(0) is False
+    assert mhtarc._is_valid_resource_index(1) is False
+
+    mock_resource = mocker.Mock(spec=mhtml.Resource)
+    mock_resource2 = mocker.Mock(spec=mhtml.Resource)
+    mhtarc._set_resources([mock_resource, mock_resource2])
+
+    assert mhtarc._is_valid_resource_index(-1) is False
+    assert mhtarc._is_valid_resource_index(0) is True
+    assert mhtarc._is_valid_resource_index(1) is True
+    assert mhtarc._is_valid_resource_index(2) is False
+    assert mhtarc._is_valid_resource_index('1') is False
+
+    # get resource nr
+    mhtarc._set_resources([])
+    assert mhtarc._resource_to_nr(mock_resource) is None
+    mhtarc._set_resources([mock_resource, mock_resource2])
+    assert mhtarc._resource_to_nr(mock_resource) == 0
+    assert mhtarc._resource_to_nr(mock_resource2) == 1
+    assert mhtarc._resource_to_nr(None) is None
+    assert mhtarc._resource_to_nr(0) is None
+
+    # get resource + nr
+    mhtarc._set_resources([])
+    assert mhtarc._get_resource_and_nr(None) == (None, None, False)
+    assert mhtarc._get_resource_and_nr(mock_resource)[2] is False
+    assert mhtarc._get_resource_and_nr(0)[2] is False
+    mhtarc._set_resources([mock_resource])
+    assert mhtarc._get_resource_and_nr(mock_resource) == \
+        (0, mock_resource, True)
+    assert mhtarc._get_resource_and_nr(mock_resource2)[2] is False
+    assert mhtarc._get_resource_and_nr(1)[2] is False
+    assert mhtarc._get_resource_and_nr(-1)[2] is False
+    mhtarc._set_resources([mock_resource, mock_resource2])
+    assert mhtarc._get_resource_and_nr(mock_resource2) == \
+        (1, mock_resource2, True)
+    assert mhtarc._get_resource_and_nr('1') == (None, None, False)
 
 
 def test_MHTMLArchive_remove_resource(mocker):  # noqa: N802
     mhtarc = mhtml.MHTMLArchive(b'content', mhtml.ResourceHeader(), 0,
                                 '---boundary---')
 
-    mock_resource = mocker.Mock()
+    mock_resource = mocker.Mock(spec=mhtml.Resource)
     mock_resource.get_resource_range.return_value = (2, 5)
     mock_method = mocker.Mock()
     mhtarc._update_offsets = mock_method
@@ -423,6 +482,265 @@ def test_MHTMLArchive_remove_resource(mocker):  # noqa: N802
     mock_method.assert_called_once_with(-3, 0)
 
 
+def test_MHTMLArchive_insert_resource_reslist_nonempty(mocker):  # noqa: N802
+    bndry = '---boundary---'
+    bndry_part = bytes('--' + bndry + '\r\n', 'ascii')
+    header = b'H: V\r\n\r\n\r\n'
+    content1 = b'H1: V2\r\n\r\ncontent\r\n'
+    content2_header = b'H2: V33\r\n\r\n'
+    content2_content = b'123\r\n'
+    content2 = content2_header + content2_content
+    content = header \
+        + bndry_part \
+        + content1 \
+        + bytes('--' + bndry + '--\r\n', 'ascii')
+    mhtarc = mhtml.MHTMLArchive(content, mhtml.ResourceHeader(), len(header),
+                                bndry)
+    # existing resource in archive
+    mock_resource = mocker.Mock(spec=mhtml.Resource)
+    mock_resource.get_resource_range.return_value = (len(header), len(header) +
+                                                     len(bndry_part) +
+                                                     len(content1))
+    mock_resource._offset_start = len(header) + len(bndry_part)
+    mock_resource._offset_content = len(header) + len(bndry) + 10
+    # resource to insert
+    mock_resource2 = mocker.Mock(spec=mhtml.Resource)
+    mock_resource2.headers = mhtml.ResourceHeader({'H2': 'V33'})
+    mock_resource2.content_with_headers = content2
+    mock_resource2._offset_start = 0
+    mock_resource2._offset_content = len(content2_header)
+    mhtarc._set_resources([mock_resource])
+
+    assert mhtarc.insert_resource(-1, mock_resource2) is False
+    assert mhtarc.insert_resource(3.14, mock_resource2) is False
+
+    # insert at start
+    assert mhtarc.insert_resource(0, mock_resource2) is True
+    # mock_method = mocker.Mock()
+    assert mhtarc.content == header \
+        + bndry_part \
+        + content2 \
+        + bndry_part \
+        + content1 \
+        + bytes('--' + bndry + '--\r\n', 'ascii')
+    assert mhtarc.resources[1] == mock_resource
+    assert mhtarc.resources[0] != mock_resource2
+    assert mhtarc.resources[0]._offset_start == \
+        len(header) + len(bndry_part)
+    assert mhtarc.resources[0]._offset_content == \
+        len(header) + len(bndry_part) + len(content2_header)
+    assert mhtarc.resources[0]._offset_end == \
+        len(header) + len(bndry_part) + len(content2)
+    assert mhtarc.resources[0].headers == mock_resource2.headers
+
+    # insert at end
+    content = header \
+        + bndry_part \
+        + content1 \
+        + bytes('--' + bndry + '--\r\n', 'ascii')
+    mhtarc._content = bytearray(content)
+    mhtarc._set_resources([mock_resource])
+    assert mhtarc.insert_resource(9001, mock_resource2) is True
+    assert mhtarc.content == header \
+        + bndry_part \
+        + content1 \
+        + bndry_part \
+        + content2 \
+        + bytes('--' + bndry + '--\r\n', 'ascii')
+    assert mhtarc.resources[0] == mock_resource
+    assert len(mhtarc.resources) == 2
+
+
+def test_MHTMLArchive_insert_resource_reslist_empty(mocker):  # noqa: N802
+    bndry = '---boundary---'
+    bndry_part = bytes('--' + bndry + '\r\n', 'ascii')
+    header = b'H: V\r\n\r\n\r\n'
+    content1 = b'H1: V2\r\n\r\ncontent\r\n'
+    content2_header = b'H2: V33\r\n\r\n'
+    content2_content = b'123\r\n'
+    content2 = content2_header + content2_content
+    content = header \
+        + bndry_part \
+        + content1 \
+        + bytes('--' + bndry + '--\r\n', 'ascii')
+    mhtarc = mhtml.MHTMLArchive(content, mhtml.ResourceHeader(), len(header),
+                                bndry)
+    # existing resource in archive
+    mock_resource = mocker.Mock(spec=mhtml.Resource)
+    mock_resource.get_resource_range.return_value = (len(header), len(header) +
+                                                     len(bndry_part) +
+                                                     len(content1))
+    mock_resource._offset_start = len(header) + len(bndry_part)
+    mock_resource._offset_content = len(header) + len(bndry) + 10
+    # resource to insert
+    mock_resource2 = mocker.Mock(spec=mhtml.Resource)
+    mock_resource2.headers = mhtml.ResourceHeader({'H2': 'V33'})
+    mock_resource2.content_with_headers = content2
+    mock_resource2._offset_start = 0
+    mock_resource2._offset_content = len(content2_header)
+    mhtarc._set_resources([mock_resource])
+
+    # insert when empty
+    content = header \
+        + bytes('--' + bndry + '--\r\n', 'ascii')
+    mhtarc._content = bytearray(content)
+    mhtarc._set_resources([])
+    assert mhtarc.insert_resource(9001, mock_resource2) is True
+    assert mhtarc.content == header \
+        + bndry_part \
+        + content2 \
+        + bytes('--' + bndry + '--\r\n', 'ascii')
+    assert len(mhtarc.resources) == 1
+    assert mhtarc.resources[0]._offset_start == \
+        len(header) + len(bndry_part)
+    assert mhtarc.resources[0]._offset_content == \
+        len(header) + len(bndry_part) + len(content2_header)
+    assert mhtarc.resources[0]._offset_end == \
+        len(header) + len(bndry_part) + len(content2)
+    assert mhtarc.resources[0].headers == mock_resource2.headers
+
+    content = header \
+        + bytes('--' + bndry + '--\r\n', 'ascii')
+    mhtarc._content = bytearray(content)
+    mhtarc._set_resources([])
+    assert mhtarc.insert_resource(0, mock_resource2) is True
+    assert mhtarc.content == header \
+        + bndry_part \
+        + content2 \
+        + bytes('--' + bndry + '--\r\n', 'ascii')
+    assert len(mhtarc.resources) == 1
+    assert mhtarc.resources[0]._offset_start == \
+        len(header) + len(bndry_part)
+    assert mhtarc.resources[0]._offset_content == \
+        len(header) + len(bndry_part) + len(content2_header)
+    assert mhtarc.resources[0]._offset_end == \
+        len(header) + len(bndry_part) + len(content2)
+
+    # check that not called (not neccessary)
+    mock_method = mocker.Mock()
+    mhtarc._content = bytearray(content)
+    mhtarc._set_resources([])
+    mhtarc._update_offsets = mock_method
+
+    assert mhtarc.insert_resource(0, mock_resource2) is True
+    mock_method.assert_not_called()
+
+
+def test_MHTMLArchive_insert_resource_update_calls(mocker):  # noqa: N802
+    bndry = '---boundary---'
+    bndry_part = bytes('--' + bndry + '\r\n', 'ascii')
+    header = b'H: V\r\n\r\n\r\n'
+    content1 = b'H1: V2\r\n\r\ncontent\r\n'
+    content2_header = b'H2: V33\r\n\r\n'
+    content2_content = b'123\r\n'
+    content2 = content2_header + content2_content
+    content = header \
+        + bndry_part \
+        + content1 \
+        + bytes('--' + bndry + '--\r\n', 'ascii')
+    mhtarc = mhtml.MHTMLArchive(content, mhtml.ResourceHeader(), len(header),
+                                bndry)
+    # existing resource in archive
+    mock_resource = mocker.Mock(spec=mhtml.Resource)
+    mock_resource.get_resource_range.return_value = (len(header), len(header) +
+                                                     len(bndry_part) +
+                                                     len(content1))
+    mock_resource._offset_start = len(header) + len(bndry_part)
+    mock_resource._offset_content = len(header) + len(bndry) + 10
+    # resource to insert
+    mock_resource2 = mocker.Mock(spec=mhtml.Resource)
+    mock_resource2.headers = mhtml.ResourceHeader({'H2': 'V33'})
+    mock_resource2.content_with_headers = content2
+    mock_resource2._offset_start = 0
+    mock_resource2._offset_content = len(content2_header)
+    mhtarc._set_resources([mock_resource])
+
+    # check that not called (not neccessary)
+    mock_method1 = mocker.Mock()
+    content = header \
+        + bytes('--' + bndry + '--\r\n', 'ascii')
+    mhtarc._content = bytearray(content)
+    mhtarc._set_resources([])
+    mhtarc._update_offsets = mock_method1
+
+    assert mhtarc.insert_resource(0, mock_resource2) is True
+    mock_method1.assert_not_called()
+
+    # check offset updates
+    mock_method2 = mocker.Mock()
+    content = header \
+        + bndry_part \
+        + content1 \
+        + bytes('--' + bndry + '--\r\n', 'ascii')
+    mhtarc._content = bytearray(content)
+    mhtarc._set_resources([mock_resource])
+    mhtarc._update_offsets = mock_method2
+    assert mhtarc.insert_resource(9001, mock_resource2) is True
+    mock_method2.assert_not_called()
+
+    mock_method3 = mocker.Mock()
+    content = header \
+        + bndry_part \
+        + content1 \
+        + bytes('--' + bndry + '--\r\n', 'ascii')
+    mhtarc._content = bytearray(content)
+    mhtarc._set_resources([mock_resource])
+    mhtarc._update_offsets = mock_method3
+    assert mhtarc.insert_resource(0, mock_resource2) is True
+    mock_method3.assert_called_once_with(len(bndry_part) + len(content2), 1)
+
+
+def test_MHTMLArchive_change_resource_content(mocker):  # noqa: E501,N802 pylint: disable=too-many-locals
+    bndry = '---boundary---'
+    bndry_part = bytes('--' + bndry + '\r\n', 'ascii')
+    header = b'H: V\r\n\r\n\r\n'
+    content1 = b'H1: V2\r\n\r\ncontent\r\n'
+    content2_header = b'H2: V33\r\n\r\n'
+    content2_content = b'123\r\n'
+    content2_content_new = b'new_content_abc'
+    content2 = content2_header + content2_content
+    content = header \
+        + bndry_part \
+        + content1 \
+        + bndry_part \
+        + content2 \
+        + bytes('--' + bndry + '--\r\n', 'ascii')
+
+    mhtarc = mhtml.MHTMLArchive(content, mhtml.ResourceHeader(), len(header),
+                                bndry)
+
+    assert mhtarc.replace_content(0, content2_content_new) is False
+    assert mhtarc.replace_content(None, content2_content_new) is False
+
+    mock_resource = mocker.Mock(spec=mhtml.Resource)
+    # resource to change
+    mock_resource2 = mocker.Mock(spec=mhtml.Resource)
+    offset = len(header) + len(bndry_part) + len(content1) + len(bndry_part)
+    mock_resource2._offset_start = offset
+    mock_resource2._offset_content = offset + len(content2_header)
+    mock_resource2._offset_end = offset + len(content2)
+    mhtarc._set_resources([mock_resource, mock_resource2])
+
+    mock_method_get = mocker.Mock(return_value=(1, mock_resource2, True))
+    mhtarc._get_resource_and_nr = mock_method_get
+    mock_method_update = mocker.Mock()
+    mhtarc._update_offsets = mock_method_update
+
+    assert mhtarc.replace_content(mock_resource2, content2_content_new) is True
+    mock_method_get.assert_called_once_with(mock_resource2)
+    # difference between content, nr nach resource
+    mock_method_update.assert_called_once_with(
+        len(content2_content_new) - len(content2_content), 2)
+    assert mock_resource2._offset_end == mock_resource2._offset_content \
+        + len(content2_content_new)
+    assert mhtarc.content == header \
+        + bndry_part \
+        + content1 \
+        + bndry_part \
+        + content2_header + content2_content_new \
+        + bytes('--' + bndry + '--\r\n', 'ascii')
+
+
 def test_MHTMLArchive_update_offsets(mocker):  # noqa: N802
     mhtarc = mhtml.MHTMLArchive(b'content', mhtml.ResourceHeader(), 0,
                                 '---boundary---')
@@ -431,15 +749,34 @@ def test_MHTMLArchive_update_offsets(mocker):  # noqa: N802
     mock_resource2 = mocker.Mock()
     mhtarc._set_resources([mock_resource, mock_resource2])
 
-    mhtarc._update_offsets(-5, 1)
+    # abort if not valid
+    mhtarc._update_offsets(-5, None)
+    mock_resource._update_offsets.assert_not_called()
+    mock_resource2._update_offsets.assert_not_called()
 
+    mhtarc._update_offsets(-5, 1)
     mock_resource._update_offsets.assert_not_called()
     mock_resource2._update_offsets.assert_called_once_with(-5)
 
     mhtarc._update_offsets(2, 0)
-
     mock_resource._update_offsets.assert_called_once_with(2)
     mock_resource2._update_offsets.assert_any_call(2)
+
+    mock_method = mocker.Mock(return_value=False)
+    mhtarc._is_valid_resource_index = mock_method
+    mhtarc._update_offsets(2, 0)
+    mock_method.assert_called_once_with(0)
+
+
+def test_ContentEncoding():  # noqa: N802
+    assert mhtml.ContentEncoding.parse('') is mhtml.ContentEncoding.UNKNOWN
+    assert mhtml.ContentEncoding.parse(' ') is mhtml.ContentEncoding.UNKNOWN
+    assert mhtml.ContentEncoding.parse('binary') is \
+        mhtml.ContentEncoding.BINARY
+    assert mhtml.ContentEncoding.parse(' bInAry') is \
+        mhtml.ContentEncoding.BINARY
+    assert mhtml.ContentEncoding.parse('B In Ary') is \
+        mhtml.ContentEncoding.UNKNOWN
 
 
 def test_ResourceHeader_headers():  # noqa: N802
@@ -600,7 +937,9 @@ def test_ResourceHeader_methods_get():  # noqa: N802
 
     assert rh.get_all('a') == ['b']
     assert rh.get_all('c') == []
+    # return default list on invalid key/name
     assert rh.get_all(None) == []
+    assert rh.get_all(None, default=1) == 1
 
     rh['A'] = 'F'
     assert rh.get_all('a') == ['b', 'F']
@@ -652,10 +991,16 @@ def test_Resource_properties(mocker):  # noqa: N802
     assert res.content == b'123'
     mock_prop.assert_called_once_with()
 
+    # content set
+    mock_prop_set = mocker.Mock()
+    res.set_content = mock_prop_set
+    res.content = b'abc123'
+    mock_prop_set.assert_called_once_with(b'abc123')
+
 
 def test_Resource_content():  # noqa: N802
     bndry = '---boundary1---'
-    content = b''
+    content = b'-'
     mhtarc = mhtml.MHTMLArchive(content, None, 0, bndry)
 
     # this should not happen
@@ -692,7 +1037,15 @@ def test_Resource_content():  # noqa: N802
     # TODO: may need an error case?
     # wrong offset or missing content?
 
-    # update
+    # update offsets wrong
+    with pytest.raises(AssertionError):
+        res._update_offsets('a')
+    with pytest.raises(AssertionError):
+        res._update_offsets(-3.4)
+    with pytest.raises(AssertionError):
+        res._update_offsets(None)
+
+    # update offsets right
     res._update_offsets(-1)
     assert res._offset_start == offset - 1
     assert res._offset_content == offset_content - 1
@@ -701,6 +1054,66 @@ def test_Resource_content():  # noqa: N802
     assert res._offset_start == offset - 1 + 3
     assert res._offset_content == offset_content - 1 + 3
     assert res._offset_end == offset_end - 1 + 3
+
+
+def test_Resource_content_get(mocker):  # noqa: N802
+    bndry = '---boundary1---'
+    bndry_part = bytes('--' + bndry + '\r\n', 'ascii')
+    bndry_end = bytes('--' + bndry + '--\r\n', 'ascii')
+    content_header = b'H1: V1\r\n\r\n'
+    content_content = b'Content\r\n'
+    content = bndry_part + content_header + content_content + bndry_end
+    # offsets in content
+    offset = len(bndry_part)
+    offset_content = offset + len(content_header)
+    offset_end = offset_content + len(content_content)
+    # objects
+    mhtarc = mhtml.MHTMLArchive(content, None, 0, bndry)
+    res = mhtml.Resource(mhtarc, None, offset, offset_content, offset_end)
+
+    assert res.get_content() == content_content
+    assert res.get_content(decode=False) == content_content
+
+    # TODO: decoded content is currently None since no decoder implemented
+    assert res.get_content(decode=True) is None
+
+    # TODO: this currently needs work ...
+    mock_headers = mocker.Mock()
+    res._headers = mock_headers
+
+    mock_headers.encoding = 'binary'
+    assert res.get_content(decode=True) == content_content
+
+    mock_headers.encoding = 'base64'
+    assert res.get_content(decode=True) is None
+    mock_headers.encoding = 'Quoted-Printable'
+    assert res.get_content(decode=True) is None
+
+    # default to binary
+    # TODO: or should default to None?
+    mock_headers.encoding = 'base64binary'
+    assert res.get_content(decode=True) is None
+
+
+def test_Resource_content_set(mocker):  # noqa: N802
+    bndry = '---boundary1---'
+    content = b'-'
+    mhtarc = mhtml.MHTMLArchive(content, None, 0, bndry)
+    res = mhtml.Resource(mhtarc, None, 0, 0, 0)
+
+    # check for correct references
+    res._mhtml_file._content = 'abc'
+    assert res.set_content(b'') is False
+    res._mhtml_file = None
+    assert res.set_content(b'') is False
+
+    # test that calls are done
+    mhtarc = mhtml.MHTMLArchive(content, None, 0, bndry)
+    res = mhtml.Resource(mhtarc, None, 0, 0, 0)
+    mock_method_replace = mocker.Mock(return_value=1)
+    mhtarc.replace_content = mock_method_replace
+    assert res.set_content(b'abc123') == 1
+    mock_method_replace.assert_called_once_with(res, b'abc123')
 
 
 def test_Resource():  # noqa: N802

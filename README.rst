@@ -11,6 +11,12 @@ MHTML Utils
    :alt: MHTML code coverage on Coveralls
    :target: https://coveralls.io/github/Querela/MHTML?branch=master
 
+.. image:: https://img.shields.io/github/languages/code-size/Querela/MHTML.svg
+   :alt: GitHub code size in bytes
+
+.. image:: https://img.shields.io/github/license/Querela/MHTML.svg
+   :alt: MHTML License
+
 .. end-badges
 
 Copyright (c) 2019 Querela.  All rights reserved.
@@ -44,10 +50,16 @@ from other sources to be sure.
 This package contains severals example scripts to show how the package can be
 used. That include dumping embedded resources into a directory, extracting
 the main web page or listing all the resources in a MHTML archive.
+It also allows to remove existing resources from an MHTML file, e. g. for
+stripping adverts, images etc. as well as inserting new resources from another
+MHTML file. (Later it may be possible to create resources from any file.)
 
-Work in progress is the ability to merge single MHTML files into a big one
-to somehow try to give an offline view of a website. E. g. the directory
-listing and all the linked webpages.
+Since Chrome disables javascript and strips all unneccessary content from a
+newly created MHTML file, it is not really possible to make an interactive
+MHTML file containing a directory and linked pages. Work in progress is the
+ability to alter a resource so that client scripts can be written to combine
+multiple MHTML files into a single one and display the whole content.
+
 It may later also be possible to create a MHTML archive from a given list or
 description but is not the priority.
 
