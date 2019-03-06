@@ -70,6 +70,25 @@ class MHTMLArchive:
             return False
         return True
 
+    def _resource_to_nr(self, resource):
+        try:
+            return self._resources.index(resource)
+        except ValueError:
+            return None
+
+    def _get_resource_and_nr(self, nr_or_resource):
+        if isinstance(nr_or_resource, Resource):
+            res_nr = self._resource_to_nr(nr_or_resource)
+            if res_nr is None:
+                return None, None, False
+            return res_nr, nr_or_resource, True
+
+        if self._is_valid_resource_index(nr_or_resource):
+            resource = self._resources[nr_or_resource]
+            return nr_or_resource, resource, True
+
+        return None, None, False
+
     def _update_offsets(self, amount, from_nr):
         if not self._is_valid_resource_index(from_nr):
             return
@@ -80,16 +99,15 @@ class MHTMLArchive:
     def get_resource(self, nr):  # pylint: disable=invalid-name
         if not self._is_valid_resource_index(nr):
             return None
-        # TODO: allow negative index (from end?)
         return self._resources[nr]
 
-    def remove_resource(self, nr):  # pylint: disable=invalid-name
-        if not self._is_valid_resource_index(nr):
+    def remove_resource(self, nr_or_resource):
+        nr, resource, ok = self._get_resource_and_nr(nr_or_resource)  # noqa: E501 pylint: disable=invalid-name
+        if not ok:
             return False
 
         # compute ranges
         boundary_length = len(self._boundary) + 4
-        resource = self._resources[nr]
         start, end = resource.get_resource_range(boundary_length)
 
         # remove
@@ -141,6 +159,27 @@ class MHTMLArchive:
         self._resources[nr:nr] = [new_resource]
 
         self._update_offsets(resource_length, nr + 1)
+
+        return True
+
+    def replace_content(self, nr_or_resource, content):
+        nr, resource, ok = self._get_resource_and_nr(nr_or_resource)  # noqa: E501 pylint: disable=invalid-name
+        if not ok:
+            return False
+
+        # get content range of old
+        offset_content = resource._offset_content
+        offset_end = resource._offset_end
+
+        # replace
+        self._content[offset_content:offset_end] = content
+
+        # update idx
+        len_content_old = offset_end - offset_content
+        len_content_new = len(content)
+        delta = len_content_new - len_content_old
+        resource._offset_end += delta
+        self._update_offsets(delta, nr + 1)
 
         return True
 
@@ -311,6 +350,10 @@ class Resource:
     def content(self):
         return self.get_content()
 
+    @content.setter
+    def content(self, content):
+        self.set_content(content)
+
     def get_content(self):
         if not self._mhtml_file:
             return None
@@ -324,6 +367,16 @@ class Resource:
             # TODO: base64, quopri?
             return content
         return content
+
+    def set_content(self, content):
+        if not self._mhtml_file:
+            return False
+        if not self._mhtml_file._content:
+            return False
+
+        # TODO: type check, conversions?
+
+        return self._mhtml_file.replace_content(self, content)
 
     @property
     def content_with_headers(self):
