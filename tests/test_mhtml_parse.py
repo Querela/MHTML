@@ -1,4 +1,5 @@
 # pylint: disable=missing-docstring,invalid-name
+# pylint: disable=protected-access
 
 import pytest
 
@@ -387,8 +388,113 @@ def test_parse_mhtml(mocker):
 # ---------------------------------------------------------------------------
 
 
-def test_parse_mhtml_struct(monkeypatch):
-    pass
+def test_parse_mhtml_struct_no_parts(mocker):
+    content = b'content'
+    bndry = '---bndry---'
+    header_end_pos = 6
+    next_pos = 55
+
+    mock_mhtarc_class = mocker.patch('mhtml.MHTMLArchive', spec=True)
+
+    mock_meth_parse_header = mocker.patch('mhtml.parse_header')
+    mock_meth_next_line = mocker.patch('mhtml.next_line')
+    mock_meth_get_boundary = mocker.patch('mhtml.get_boundary')
+    mock_meth_parse_parts = mocker.patch('mhtml.parse_parts')
+
+    # only header
+    mock_mhtarc_class.return_value = mocker.sentinel.mhtarc
+    mock_meth_parse_header.return_value = (mocker.sentinel.headers,
+                                           header_end_pos)
+    mock_meth_next_line.return_value = (b'\r\n', next_pos)
+    mock_meth_get_boundary.return_value = bndry
+    assert mhtml.parse_mhtml_struct(content, True) == mocker.sentinel.mhtarc
+    mock_meth_parse_header.assert_called_once_with(content, 0)
+    mock_meth_next_line.assert_called_once_with(content, header_end_pos)
+    mock_meth_get_boundary.assert_called_once_with(mocker.sentinel.headers)
+    mock_mhtarc_class.assert_called_once_with(content, mocker.sentinel.headers,
+                                              next_pos, bndry)
+    mock_meth_parse_parts.assert_not_called()
+
+    # no extra free line after header
+    mock_mhtarc_class.reset_mock()
+    mock_meth_parse_header.reset_mock()
+    mock_meth_next_line.reset_mock()
+    mock_meth_get_boundary.reset_mock()
+    mock_meth_next_line.return_value = (b'start of content or bndry', next_pos)
+    assert mhtml.parse_mhtml_struct(content, True) == mocker.sentinel.mhtarc
+    mock_meth_parse_header.assert_called_once_with(content, 0)
+    mock_meth_next_line.assert_called_once_with(content, header_end_pos)
+    mock_meth_get_boundary.assert_called_once_with(mocker.sentinel.headers)
+    mock_mhtarc_class.assert_called_once_with(content, mocker.sentinel.headers,
+                                              header_end_pos, bndry)
+    mock_meth_parse_parts.assert_not_called()
+
+    # no boundary
+    mock_mhtarc_class.reset_mock()
+    mock_meth_parse_header.reset_mock()
+    mock_meth_next_line.reset_mock()
+    mock_meth_get_boundary.reset_mock()
+    mock_meth_get_boundary.return_value = None
+    mock_meth_next_line.return_value = (b'\r\n', next_pos)
+    assert mhtml.parse_mhtml_struct(content, True) == mocker.sentinel.mhtarc
+    mock_meth_parse_header.assert_called_once_with(content, 0)
+    mock_meth_next_line.assert_called_once_with(content, header_end_pos)
+    mock_meth_get_boundary.assert_called_once_with(mocker.sentinel.headers)
+    mock_mhtarc_class.assert_called_once_with(content, mocker.sentinel.headers,
+                                              next_pos, None)
+    mock_meth_parse_parts.assert_not_called()
+
+
+def test_parse_mhtml_struct_with_parts(mocker):
+    content = b'content'
+    bndry = '---bndry---'
+    header_end_pos = 6
+    next_pos = 55
+    parts = [(1, 2, 3, 4), (11, 22, 33, 44), (111, 222, 333, 444)]  # dummies
+
+    mock_mhtarc_class = mocker.patch('mhtml.MHTMLArchive', spec=True)
+    mock_res_class = mocker.patch('mhtml.Resource', spec=True)
+
+    mock_meth_parse_header = mocker.patch('mhtml.parse_header')
+    mock_meth_next_line = mocker.patch('mhtml.next_line')
+    mock_meth_get_boundary = mocker.patch('mhtml.get_boundary')
+    mock_meth_parse_parts = mocker.patch('mhtml.parse_parts')
+
+    # only header
+    mock_mhtarc_class.return_value = mocker.sentinel.mhtarc
+    mock_meth_parse_header.return_value = (mocker.sentinel.headers,
+                                           header_end_pos)
+    mock_meth_set_res = mocker.Mock()
+    mocker.sentinel.mhtarc._set_resources = mock_meth_set_res
+    mock_meth_next_line.return_value = (b'\r\n', next_pos)
+    mock_meth_get_boundary.return_value = bndry
+    mock_meth_parse_parts.return_value = (parts, -1)
+    mock_res_class.side_effect = [mocker.sentinel.res1, mocker.sentinel.res2,
+                                  mocker.sentinel.res3]
+    assert mhtml.parse_mhtml_struct(content, False) == mocker.sentinel.mhtarc
+    mock_meth_parse_header.assert_called_once_with(content, 0)
+    mock_meth_next_line.assert_called_once_with(content, header_end_pos)
+    mock_meth_get_boundary.assert_called_once_with(mocker.sentinel.headers)
+    mock_mhtarc_class.assert_called_once_with(content, mocker.sentinel.headers,
+                                              next_pos, bndry)
+    mock_meth_parse_parts.assert_called_once_with(content, bndry, next_pos)
+    mock_meth_set_res.assert_called_once_with([mocker.sentinel.res1,
+                                               mocker.sentinel.res2,
+                                               mocker.sentinel.res3])
+    mock_res_class.assert_has_calls([
+        mocker.call(mocker.sentinel.mhtarc, 1, 2, 3, 4),
+        mocker.call(mocker.sentinel.mhtarc, 11, 22, 33, 44),
+        mocker.call(mocker.sentinel.mhtarc, 111, 222, 333, 444)])
+
+    # no end of parts parse
+    mock_res_class.reset_mock()
+    mock_meth_set_res.reset_mock()
+    mock_meth_parse_parts.return_value = (parts, 2)
+    with pytest.raises(AssertionError,
+                       match='file should be completly parsed'):
+        mhtml.parse_mhtml_struct(content, False)
+    mock_res_class.assert_not_called()
+    mock_meth_set_res.assert_not_called()
 
 
 def _get_open_ref():  # pragma: no cover

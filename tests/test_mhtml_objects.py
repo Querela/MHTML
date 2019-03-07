@@ -33,6 +33,17 @@ def test_MHTMLArchive_properties(mocker):  # noqa: N802
 
     assert mhtarc.content == b'content'
 
+    # WIP no boundary? - may need to create one
+    mock_method = mocker.patch('mhtml.get_boundary', return_value=None)
+    mock_headers = mocker.Mock(spec=mhtml.ResourceHeader)
+    mhtarc = mhtml.MHTMLArchive(b'content', mock_headers, 0, None)
+    assert mhtarc.boundary is None
+    mock_method.assert_called_once_with(mock_headers)
+    # check if in headers
+    mocker.patch('mhtml.get_boundary', return_value=mocker.sentinel.bndry)
+    mhtarc = mhtml.MHTMLArchive(b'content', mhtml.ResourceHeader(), 0, None)
+    assert mhtarc.boundary == mocker.sentinel.bndry
+
 
 def test_MHTMLArchive_properties_resources(mocker):  # noqa: N802
     mhtarc = mhtml.MHTMLArchive(b'content', mhtml.ResourceHeader(), 0,

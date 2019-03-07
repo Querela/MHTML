@@ -28,9 +28,12 @@ class MHTMLArchive:
             headers = ResourceHeader()
             header_length = 0  # TODO: WIP
 
-        if not boundary:
-            # TODO: create boundary?
-            pass
+        if boundary is None:
+            logger.debug('Got no boundary? Try to get from header')
+            boundary = get_boundary(headers)
+            if boundary is None:
+                logger.warning('Found no boundary in headers? Should create one?')
+                # TODO: create boundary?
 
         self._headers = headers
         self._header_length = header_length
