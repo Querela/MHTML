@@ -13,9 +13,11 @@ MHTML Utils
 
 .. image:: https://img.shields.io/github/languages/code-size/Querela/MHTML.svg
    :alt: GitHub code size in bytes
+   :target: https://github.com/Querela/MHTML/archive/master.zip
 
 .. image:: https://img.shields.io/github/license/Querela/MHTML.svg
    :alt: MHTML License
+   :target: https://github.com/Querela/MHTML/blob/master/LICENSE
 
 .. end-badges
 
