@@ -1,4 +1,4 @@
-# pylint: disable=missing-docstring,invalid-name
+# pylint: disable=missing-docstring,invalid-name,too-many-locals
 # pylint: disable=protected-access
 
 import pytest
@@ -335,8 +335,58 @@ def test_MHTMLArchive_insert_resource_update_calls(mocker):  # noqa: N802
     assert mhtarc.insert_resource(0, mock_resource2) is True
     mock_method3.assert_called_once_with(len(bndry_part) + len(content2), 1)
 
+    # simply test that the resource parameter is given to the next method
+    mock_method4 = mocker.Mock(return_value=4)
+    mhtarc._set_resources([1, 2, 3])
+    mhtarc.insert_resource = mock_method4
+    assert mhtarc.append_resource('abc') == 4
+    mock_method4.assert_called_once_with(3, 'abc')
 
-def test_MHTMLArchive_change_resource_content(mocker):  # noqa: E501,N802 pylint: disable=too-many-locals
+
+def test_MHTMLArchive_move_resource(mocker):  # noqa: N802
+    bndry = '---boundary---'
+    content = b'content'
+    mhtarc = mhtml.MHTMLArchive(content, mhtml.ResourceHeader(), 0, bndry)
+    mock_resource = mocker.Mock(spec=mhtml.Resource)
+    mock_resource2 = mocker.Mock(spec=mhtml.Resource)
+    mock_resource2.headers = mhtml.ResourceHeader({'H2': 'V33'})
+    mhtarc._set_resources([mock_resource, mock_resource2])
+
+    # _get_resource_and_nr fails
+    mock_method_getresnr1 = mocker.Mock(return_value=(None, None, False))
+    mhtarc._get_resource_and_nr = mock_method_getresnr1
+    assert mhtarc.move_resource(mocker.sentinel.nr_or_res,
+                                mocker.sentinel.nr) is False
+    mock_method_getresnr1.assert_called_once_with(mocker.sentinel.nr_or_res)
+
+    # _get_resource_and_nr ok, same position
+    pos = 1234
+    mock_method_getresnr2 = mocker.Mock(return_value=(pos,
+                                                      mocker.sentinel.res,
+                                                      True))
+    mhtarc._get_resource_and_nr = mock_method_getresnr2
+    assert mhtarc.move_resource(mocker.sentinel.nr_or_res, pos) is True
+    mock_method_getresnr2.assert_called_once_with(mocker.sentinel.nr_or_res)
+
+    # _get_resource_and_nr ok, different position, insert fails
+    pos2 = 4321
+    mock_method_insert1 = mocker.Mock(return_value=False)
+    mhtarc.insert_resource = mock_method_insert1
+    assert mhtarc.move_resource(mocker.sentinel.nr_or_res, pos2) is False
+    mock_method_insert1.assert_called_once_with(pos2, mocker.sentinel.res)
+
+    # ret ok, different nrs, insert ok, remove
+    mock_method_insert2 = mocker.Mock(return_value=True)
+    mock_method_remove = mocker.Mock(return_value=mocker.sentinel.remove_ret)
+    mhtarc.insert_resource = mock_method_insert2
+    mhtarc.remove_resource = mock_method_remove
+    assert mhtarc.move_resource(mocker.sentinel.nr_or_res, pos2) \
+        is mocker.sentinel.remove_ret
+    mock_method_insert2.assert_called_once_with(pos2, mocker.sentinel.res)
+    mock_method_remove.assert_called_once_with(mocker.sentinel.res)
+
+
+def test_MHTMLArchive_change_resource_content(mocker):  # noqa: N802
     bndry = '---boundary---'
     bndry_part = bytes('--' + bndry + '\r\n', 'ascii')
     header = b'H: V\r\n\r\n\r\n'
@@ -762,3 +812,47 @@ def test_Resource_content_set(mocker):  # noqa: N802
     mhtarc.replace_content = mock_method_replace
     assert res.set_content(b'abc123') == 1
     mock_method_replace.assert_called_once_with(res, b'abc123')
+
+
+def test_content_hashing(mocker):
+    content = b'content'
+    content1 = b'abc'
+    content2 = b'123_abc'
+    mock_method_content = mocker.PropertyMock(return_value=content)
+    mock_method_content1 = mocker.PropertyMock(return_value=content1)
+    mock_method_content2 = mocker.PropertyMock(return_value=content2)
+
+    # with the first two variants, the object can be created beforehand
+    # var1: maybe no cleanup afterwards?
+    # type(mhtarc).content = mock_method_content
+    # var2: treats property as object?
+    # mocker.patch('mhtml.MHTMLArchive.content',
+    #              new_callable=mock_method_content)
+    # var3: should probably be used
+    mocker.patch.object(mhtml.MHTMLArchive, 'content',
+                        mock_method_content)
+    mocker.patch.object(mhtml.Resource, 'content',
+                        mock_method_content1)
+    mocker.patch.object(mhtml.Resource, 'content_with_headers',
+                        mock_method_content2)
+
+    mhtarc = mhtml.MHTMLArchive(b'-', None, 0, b'--')
+    res = mhtml.Resource(mhtarc, None, 0, 0, 0)
+
+    import hashlib
+    m = hashlib.sha256()
+    m.update(content)
+    hash_content = m.digest()
+    m = hashlib.sha256()
+    m.update(content1)
+    hash_content1 = m.digest()
+    m = hashlib.sha256()
+    m.update(content2)
+    hash_content2 = m.digest()
+
+    assert mhtarc.content_hash == hash_content
+    mock_method_content.assert_called_once_with()
+    assert res.content_hash == hash_content1
+    mock_method_content1.assert_called_once_with()
+    assert res.content_with_headers_hash == hash_content2
+    mock_method_content2.assert_called_once_with()
