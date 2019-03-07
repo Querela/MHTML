@@ -32,7 +32,8 @@ class MHTMLArchive:
             logger.debug('Got no boundary? Try to get from header')
             boundary = get_boundary(headers)
             if boundary is None:
-                logger.warning('Found no boundary in headers? Should create one?')
+                logger.warning('Found no boundary in headers? '
+                               'Should create one?')
                 # TODO: create boundary?
 
         self._headers = headers
@@ -64,7 +65,7 @@ class MHTMLArchive:
     @property
     def content_hash(self):
         import hashlib
-        m = hashlib.sha256()
+        m = hashlib.sha256()  # pylint: disable=invalid-name
         m.update(self.content)
         return m.digest()
 
@@ -370,7 +371,7 @@ class ContentEncoding(Enum):
 
         encoding = encoding.lower()
 
-        for ce in (cls.BINARY, cls.BASE64, cls.QUOTEDPRINTABLE, cls.SEVENBIT,
+        for ce in (cls.BINARY, cls.BASE64, cls.QUOTEDPRINTABLE, cls.SEVENBIT,  # noqa: E501 pylint: disable=invalid-name
                    cls.EIGHTBIT):
             if ce.value == encoding:
                 return ce
@@ -386,7 +387,8 @@ class Resource:
 
         if not isinstance(headers, ResourceHeader):
             if isinstance(headers, (list, dict)):
-                logger.debug('Converting list/dict headers into ResourceHeader')
+                logger.debug('Converting list/dict headers into '
+                             'ResourceHeader')
                 headers = ResourceHeader(headers)
             else:
                 logger.warning('headers given are not from type %s: %s',
@@ -438,14 +440,14 @@ class Resource:
     @property
     def content_hash(self):
         import hashlib
-        m = hashlib.sha256()
+        m = hashlib.sha256()  # pylint: disable=invalid-name
         m.update(self.content)
         return m.digest()
 
     @property
     def content_with_headers_hash(self):
         import hashlib
-        m = hashlib.sha256()
+        m = hashlib.sha256()  # pylint: disable=invalid-name
         m.update(self.content_with_headers)
         return m.digest()
 
@@ -469,7 +471,7 @@ class Resource:
         encoding = ContentEncoding.parse(encoding)
 
         if encoding in (ContentEncoding.BINARY, ContentEncoding.SEVENBIT,
-                           ContentEncoding.EIGHTBIT):
+                        ContentEncoding.EIGHTBIT):
             return content
 
         if encoding is ContentEncoding.BASE64:
