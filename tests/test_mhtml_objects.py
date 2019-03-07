@@ -548,6 +548,8 @@ def test_ResourceHeader_magic():  # noqa: N802
     rh = mhtml.ResourceHeader([('a', 'b'), ('A', 'c'), ('D', 'e')])
     assert rh.as_dict() == {'a': 'b', 'A': 'c', 'D': 'e'}
 
+    # TODO: items() modification ?
+
     # iter
     rh = mhtml.ResourceHeader([('a', 'b'), ('A', 'c'), ('D', 'e')])
     assert iter(rh)

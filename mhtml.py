@@ -59,6 +59,13 @@ class MHTMLArchive:
         return bytes(self._content)
 
     @property
+    def content_hash(self):
+        import hashlib
+        m = hashlib.sha256()
+        m.update(self.content)
+        return m.digest()
+
+    @property
     def boundary(self):
         return self._boundary
 
@@ -178,6 +185,27 @@ class MHTMLArchive:
             self._update_offsets(resource_length, nr + 1)
 
         return True
+
+    def append_resource(self, resource):
+        return self.insert_resource(len(self._resources), resource)
+
+    def move_resource(self, nr_or_resource, to_pos):
+        nr, resource, ok = self._get_resource_and_nr(nr_or_resource)  # noqa: E501 pylint: disable=invalid-name
+        if not ok:
+            return False
+
+        if nr == to_pos:
+            logger.debug('Trying to move resource to same place, %d', nr)
+            return True
+
+        if not self.insert_resource(to_pos, resource):
+            logger.warning('Inserting resource failed?, %d, %s', to_pos,
+                           resource)
+            return False
+
+        # remove_resource retrieves the new pos
+        # moving to front of old pos will increase the nr
+        return self.remove_resource(resource)
 
     def replace_content(self, nr_or_resource, content):
         nr, resource, ok = self._get_resource_and_nr(nr_or_resource)  # noqa: E501 pylint: disable=invalid-name
@@ -385,9 +413,6 @@ class Resource:
     def location(self):
         return self.headers.location
 
-    def get_short_filename(self, default='res.bin'):
-        return make_filename(self._headers, default=default)
-
     @property
     def content(self):
         return self.get_content()
@@ -395,6 +420,34 @@ class Resource:
     @content.setter
     def content(self, content):
         self.set_content(content)
+
+    @property
+    def content_with_headers(self):
+        if not self._mhtml_file:
+            return None
+        if not isinstance(self._mhtml_file._content, bytearray):
+            return None
+
+        content = bytes(self._mhtml_file
+                        ._content[self._offset_start:self._offset_end])
+        return content
+
+    @property
+    def content_hash(self):
+        import hashlib
+        m = hashlib.sha256()
+        m.update(self.content)
+        return m.digest()
+
+    @property
+    def content_with_headers_hash(self):
+        import hashlib
+        m = hashlib.sha256()
+        m.update(self.content_with_headers)
+        return m.digest()
+
+    def get_short_filename(self, default='res.bin'):
+        return make_filename(self._headers, default=default)
 
     def get_content(self, decode=False):
         if not self._mhtml_file:
@@ -437,17 +490,6 @@ class Resource:
         # TODO: type check, conversions?
 
         return self._mhtml_file.replace_content(self, content)
-
-    @property
-    def content_with_headers(self):
-        if not self._mhtml_file:
-            return None
-        if not isinstance(self._mhtml_file._content, bytearray):
-            return None
-
-        content = bytes(self._mhtml_file
-                        ._content[self._offset_start:self._offset_end])
-        return content
 
     def get_resource_range(self, boundary_length=0):
         if boundary_length < 0:
