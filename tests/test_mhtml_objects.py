@@ -548,7 +548,7 @@ def test_ResourceHeader_properties(mocker):  # noqa: N802
     def mock_get_sideeffect(name):
         if name == 'Snapshot-Content-Location':
             return 5
-        return None
+        return None  # pragma: no cover
 
     mock_get = mocker.Mock(side_effect=mock_get_sideeffect)
     rh.get = mock_get

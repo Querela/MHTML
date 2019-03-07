@@ -317,8 +317,71 @@ def test_parse_parts_with_head_boundary():
               20, 30, 39)], -1)
 
 
-def test_parse_mhtml(monkeypatch):
-    pass
+def test_parse_mhtml(mocker):
+    content = b'content'
+    bndry = '--bndry--'
+    header_end_pos = 5
+    line1 = b'\r\n'
+    line2 = b'other\r\n'
+    next_pos = 10
+    parts = [1, 2, 4]
+
+    mock_meth_parse_header = mocker.Mock()
+    mock_meth_next_line = mocker.Mock()
+    mock_meth_get_boundary = mocker.Mock()
+    mock_meth_parse_parts = mocker.Mock()
+    mocker.patch('mhtml.parse_header', mock_meth_parse_header)
+    mocker.patch('mhtml.next_line', mock_meth_next_line)
+    mocker.patch('mhtml.get_boundary', mock_meth_get_boundary)
+    mocker.patch('mhtml.parse_parts', mock_meth_parse_parts)
+
+    # no boundary in header
+    mock_meth_parse_header.return_value = (mocker.sentinel.headers,
+                                           header_end_pos)
+    mock_meth_next_line.return_value = (line1, next_pos)
+    mock_meth_get_boundary.return_value = None
+    assert mhtml.parse_mhtml(content) == (mocker.sentinel.headers, None)
+    mock_meth_parse_header.assert_called_once_with(content, 0)
+    mock_meth_next_line.assert_called_once_with(content, header_end_pos)
+    mock_meth_get_boundary.assert_called_once_with(mocker.sentinel.headers)
+    mock_meth_parse_parts.assert_not_called()
+
+    # with boundary
+    mock_meth_parse_header.reset_mock()
+    mock_meth_next_line.reset_mock()
+    mock_meth_get_boundary.reset_mock()
+    mock_meth_next_line.return_value = (line1, next_pos)
+    mock_meth_get_boundary.return_value = bndry
+    mock_meth_parse_parts.return_value = (parts, -1)
+    assert mhtml.parse_mhtml(content) == (mocker.sentinel.headers, parts)
+    mock_meth_parse_header.assert_called_once_with(content, 0)
+    mock_meth_next_line.assert_called_once_with(content, header_end_pos)
+    mock_meth_get_boundary.assert_called_once_with(mocker.sentinel.headers)
+    mock_meth_parse_parts.assert_called_once_with(content, bndry, next_pos)
+
+    # only single empty line after header
+    # TODO: should fail if not two empty lines after header?
+    mock_meth_next_line.reset_mock()
+    mock_meth_get_boundary.reset_mock()
+    mock_meth_parse_parts.reset_mock()
+    mock_meth_next_line.return_value = (line2, next_pos)
+    mock_meth_parse_parts.return_value = (parts, -1)
+    assert mhtml.parse_mhtml(content) == (mocker.sentinel.headers, parts)
+    mock_meth_next_line.assert_called_once_with(content, header_end_pos)
+    mock_meth_get_boundary.assert_called_once_with(mocker.sentinel.headers)
+    mock_meth_parse_parts.assert_called_once_with(content, bndry,
+                                                  header_end_pos)
+
+    # invalid parts parse
+    mock_meth_parse_parts.reset_mock()
+    mock_meth_parse_parts.return_value = (parts, 9001)
+    with pytest.raises(AssertionError,
+                       match='file should be completly parsed'):
+        mhtml.parse_mhtml(content)
+    mock_meth_parse_parts.assert_called_once_with(content, bndry,
+                                                  header_end_pos)
+
+    # TODO: check if not bytes content?
 
 
 # ---------------------------------------------------------------------------
@@ -328,7 +391,7 @@ def test_parse_mhtml_struct(monkeypatch):
     pass
 
 
-def _get_open_ref():
+def _get_open_ref():  # pragma: no cover
     '''
     see: https://github.com/andras-tim/octoconf/blob/master/tests/common.py
     :rtype str
