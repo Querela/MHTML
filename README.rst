@@ -11,6 +11,10 @@ MHTML Utils
    :alt: MHTML code coverage on Coveralls
    :target: https://coveralls.io/github/Querela/MHTML?branch=master
 
+.. image:: https://img.shields.io/github/release/Querela/MHTML.svg
+   :alt: GitHub release
+   :target: https://github.com/Querela/MHTML/releases/latest
+
 .. image:: https://img.shields.io/github/languages/code-size/Querela/MHTML.svg
    :alt: GitHub code size in bytes
    :target: https://github.com/Querela/MHTML/archive/master.zip
